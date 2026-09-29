@@ -1,0 +1,40 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.2-pg18
+        env:
+          POSTGRES_DB: habitpet
+          POSTGRES_USER: habitpet
+          POSTGRES_PASSWORD: testing-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U habitpet -d habitpet"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DB_PORT: '5432'
+      DB_PASSWORD: testing-only
+      AI_MODE: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - run: pip install -r requirements.lock
+      - run: python backend/manage.py check
+      - run: python backend/manage.py makemigrations --check --dry-run
+      - run: ruff check backend scripts evaluation
+      - run: pytest -q
+      - run: python backend/manage.py migrate --noinput
+      - run: python backend/manage.py evaluate_ai
+  swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path watch
+      - run: xcodebuild -project watch/HabitPet.xcodeproj -scheme HabitPet -sdk watchsimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build

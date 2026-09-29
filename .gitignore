@@ -1,0 +1,14 @@
+.venv/
+.env
+work/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.sqlite3
+.DS_Store
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+evaluation/results/

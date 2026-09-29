@@ -1,0 +1,240 @@
+[
+  {
+    "id": "study_evening",
+    "split": "test",
+    "query": "Japanese study after dinner",
+    "memories": [
+      "I study Japanese after dinner",
+      "I enjoy morning walks",
+      "I prefer quiet music",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "short_focus",
+    "split": "test",
+    "query": "short focus study sessions",
+    "memories": [
+      "I prefer short study sessions",
+      "I like walking near the river",
+      "I drink tea",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "morning_walk",
+    "split": "test",
+    "query": "morning walk reminder",
+    "memories": [
+      "I enjoy morning walks",
+      "I study coding at night",
+      "I prefer short study sessions",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "reading",
+    "split": "test",
+    "query": "reading before bed",
+    "memories": [
+      "I read books before bed",
+      "I am learning Japanese",
+      "I enjoy hiking",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "coding",
+    "split": "test",
+    "query": "coding work at night",
+    "memories": [
+      "I do coding work at night",
+      "I take walks in the morning",
+      "I read fiction on weekends",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "weekend",
+    "split": "test",
+    "query": "weekend hiking goal",
+    "memories": [
+      "I go hiking on weekends",
+      "I study Japanese every weekday",
+      "I like quiet reminders",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "gentle",
+    "split": "test",
+    "query": "gentle quiet reminders",
+    "memories": [
+      "I prefer gentle quiet reminders",
+      "I want to read ten books",
+      "I enjoy afternoon walks",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "language_goal",
+    "split": "test",
+    "query": "Japanese daily language goal",
+    "memories": [
+      "My goal is Japanese practice every day",
+      "I enjoy coffee after lunch",
+      "I work on Python projects",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "chinese_study",
+    "split": "test",
+    "query": "晚饭后学习日语提醒",
+    "memories": [
+      "我通常在晚饭后学习日语",
+      "我喜欢早上散步",
+      "我希望周末读小说",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "chinese_reading",
+    "split": "test",
+    "query": "睡前读书习惯",
+    "memories": [
+      "我喜欢睡前读书",
+      "我通常午饭后散步",
+      "我正在练习日语听力",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "changed_routine",
+    "split": "test",
+    "query": "new morning study routine",
+    "memories": [
+      "My new study routine is in the morning",
+      "I used to study after dinner",
+      "I prefer quiet reminders",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": [
+      0
+    ]
+  },
+  {
+    "id": "no_relevant",
+    "split": "test",
+    "query": "pet food inventory",
+    "memories": [
+      "I like blue",
+      "I read science fiction",
+      "I enjoy jazz",
+      "I enjoy painting landscapes on Sundays",
+      "My favorite color is green",
+      "I want to cook a new recipe this month",
+      "I prefer instrumental music while relaxing",
+      "I am learning to play the piano",
+      "I call my family every weekend",
+      "I like taking photos of flowers"
+    ],
+    "relevant": []
+  }
+]

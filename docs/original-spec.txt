@@ -1,0 +1,1797 @@
+对，这次按**“系统研究与实现规格书”**来写：不安排日期、不写 Week 1/2，只定义这个项目到底研究什么、有哪些功能、各模块怎么实现、数据怎么流、LLM 和 pgvector 各自承担什么，以及最终如何证明它做得好。
+
+# AI Virtual Pet for Apple Watch  
+## 系统研究与实现计划书
+
+**暂定项目名称：** HabitPet / PetPulse / 待定  
+**核心概念：** *Your habits are its life.*
+
+---
+
+# 1. 项目概述
+
+本项目拟开发一个运行于 Apple Watch 的 AI 虚拟宠物系统。
+
+用户在现实生活中的行为会直接影响虚拟宠物的生存、状态和成长。例如：
+
+| 用户现实行为 | 宠物获得的效果 |
+|---|---|
+| 完成 30 分钟日语学习 | 获得食物 |
+| 完成学习/工作任务 | 获得 XP、金币或道具 |
+| 喝水打卡 | 宠物 Hydration 上升 |
+| 达到一定步数 | 宠物 Mood 上升 |
+| 获得充分睡眠 | 宠物 Energy 上升 |
+| 长期保持某类习惯 | 决定宠物进化方向 |
+
+核心循环为：
+
+**现实行为 → 游戏资源 → 宠物状态 → 宠物反馈 → 用户行为 → 长期成长**
+
+用户需要通过照顾自己的现实生活来照顾宠物。
+
+Apple Watch 提供低摩擦、随身和高频交互场景；HealthKit 提供步数和睡眠等用户授权后的健康数据；LLM 负责宠物人格、上下文理解、个性化提醒以及长期记忆。
+
+HealthKit 本身是 Apple 为 iPhone 和 Apple Watch 提供的健康与健身数据中心，应用可在用户明确授权后读取相应数据。:chatgpt-content-reference{index="0"}
+
+---
+
+# 2. 项目目标
+
+系统最终需要同时满足四个目标。
+
+### 产品目标
+
+形成一个真正具有养成循环的虚拟宠物产品，而非简单的 Habit Tracker。
+
+用户会产生：
+
+> “如果我今天不完成这个目标，我的宠物就拿不到晚饭。”
+
+这种虚拟责任感和游戏反馈形成持续使用动力。
+
+### AI 目标
+
+构建一个能够利用：
+
+- 当前宠物状态
+- 当日 Habit 状态
+- 当前时间
+- 用户历史行为
+- HealthKit summary
+- 历史交互
+- 长期语义记忆
+
+生成个性化互动的 AI Pet Brain。
+
+### 软件工程目标
+
+实现完整的：
+
+**watchOS → REST API → Django → PostgreSQL/pgvector → LLM**
+
+工程链路，包括身份认证、数据持久化、测试、Docker 和部署。
+
+### 求职展示目标
+
+最终项目可以证明：
+
+**Swift / SwiftUI / watchOS / HealthKit / Django / DRF / PostgreSQL / pgvector / LLM / Docker / Testing / Deployment / AI Evaluation**
+
+等能力。
+
+---
+
+# 3. 核心创新点
+
+项目重点建立三个具有辨识度的机制。
+
+## 3.1 Reality-to-Pet Mapping
+
+现实中的用户行为成为游戏资源。
+
+例如：
+
+```text
+Japanese Study 30 min
+        ↓
+     🍖 Food
+        ↓
+     Feed Pet
+        ↓
+ Hunger +30
+ Bond +2
+ XP +5
+```
+
+这让习惯完成具有即时游戏价值。
+
+---
+
+# 3.2 Shared State Between User and Pet
+
+宠物部分状态来源于用户现实状态。
+
+例如：
+
+```text
+昨晚睡眠 5h 20min
+       ↓
+Pet Energy 较低
+       ↓
+宠物第二天表现困倦
+       ↓
+🥱 animation
+```
+
+再例如：
+
+```text
+今天步数 8,000+
+       ↓
+Pet Mood ↑
+       ↓
+😄 / ✨ animation
+```
+
+用户和宠物因此共享某种“生活状态”。
+
+---
+
+# 3.3 AI Pet With Long-Term Memory
+
+宠物能够逐渐形成对主人的了解。
+
+例如长期记录：
+
+```text
+User usually studies Japanese after dinner.
+
+User often ignores reminders before 18:00.
+
+User tends to complete coding tasks late at night.
+
+User prefers shorter 20–30 min focus sessions.
+```
+
+之后生成提醒时，会检索相关历史记忆。
+
+普通提醒：
+
+> Time to study Japanese.
+
+有长期记忆：
+
+> You usually do Japanese after dinner. Want to finish today's 30 minutes so I can finally eat? 👀
+
+这部分将成为项目的主要 AI 技术亮点。
+
+---
+
+# 4. 系统整体架构
+
+系统由五层组成。
+
+```text
+┌────────────────────────────┐
+│       Apple Watch          │
+│ SwiftUI / HealthKit        │
+│ Habit UI / Pet UI          │
+└─────────────┬──────────────┘
+              │ HTTPS
+              ↓
+┌────────────────────────────┐
+│     Django REST API        │
+│ Auth / Habits / Pet        │
+│ Health / Interaction       │
+└─────────────┬──────────────┘
+              ↓
+┌────────────────────────────┐
+│ PostgreSQL + pgvector      │
+│ Users / Pet / Habits       │
+│ Health Summary / Memory    │
+└─────────────┬──────────────┘
+              ↓
+┌────────────────────────────┐
+│       AI Pet Brain         │
+│ Context Builder            │
+│ Memory Retrieval           │
+│ LLM                        │
+└─────────────┬──────────────┘
+              ↓
+┌────────────────────────────┐
+│ Personalized Pet Response  │
+│ Emotion / Text / Action    │
+└────────────────────────────┘
+```
+
+---
+
+# 5. Apple Watch 主界面
+
+Watch App 的交互需要保持非常轻量。
+
+主页主要展示：
+
+```text
+        🐣
+       Mochi
+
+      Level 7
+
+Hunger     ██████░░
+Energy     █████░░░
+Mood       ███████░
+Hydration  ██████░░
+
+🍖 2
+
+"Where's my dinner? 🥺"
+
+[ Feed ]
+```
+
+主页承担：
+
+**宠物状态 + 当前最重要互动**
+
+避免放入大量数据。
+
+---
+
+# 6. Pet State Engine
+
+Pet Engine 属于整个系统的核心 deterministic subsystem。
+
+LLM 不直接修改关键游戏数值。
+
+宠物初始维护：
+
+| 属性 | 范围 | 含义 |
+|---|---:|---|
+| Hunger | 0–100 | 饱腹状态 |
+| Hydration | 0–100 | 饮水状态 |
+| Energy | 0–100 | 精力 |
+| Mood | 0–100 | 心情 |
+| Bond | 0–100 | 与用户关系 |
+| XP | integer | 成长经验 |
+| Level | integer | 等级 |
+| Age | days | 生命周期 |
+| Generation | integer | 第几代 |
+
+---
+
+# 7. Hunger System
+
+Hunger 会随时间下降。
+
+例如：
+
+```text
+每 4 小时：
+Hunger -5
+```
+
+完成 Study Habit：
+
+```text
+Food Inventory +1
+```
+
+用户仍然需要主动：
+
+```text
+Feed
+```
+
+然后：
+
+```text
+Food -1
+Hunger +30
+Bond +2
+XP +5
+```
+
+这里非常重要：
+
+**完成任务获得资源，随后使用资源照顾宠物。**
+
+如果自动完成任务就直接 +Hunger，养宠物的互动会弱很多。
+
+---
+
+# 8. 宠物饥饿与死亡系统
+
+宠物状态根据 Hunger 分层：
+
+```text
+70–100   Full
+40–69    Normal
+20–39    Hungry
+1–19     Very Hungry
+0        Critical
+```
+
+达到 Critical 后开始累计：
+
+```text
+critical_since
+```
+
+长期无人照顾时进入：
+
+```text
+Healthy
+ ↓
+Hungry
+ ↓
+Very Hungry
+ ↓
+Sick
+ ↓
+Critical
+ ↓
+Death
+```
+
+死亡后保存：
+
+```text
+Generation 1
+
+Lifetime:
+42 days
+
+Highest Level:
+18
+
+Main Path:
+Scholar
+
+Completed Habits:
+164
+
+Bond:
+87
+```
+
+之后允许：
+
+**Rebirth**
+
+新宠物作为 Generation 2。
+
+这样死亡具有后果，同时仍然保留长期游戏价值。
+
+---
+
+# 9. Habit System
+
+用户可以自己创建 Habit。
+
+例如：
+
+```text
+Name:
+Japanese
+
+Category:
+Study
+
+Target:
+30
+
+Unit:
+minutes
+
+Frequency:
+daily
+
+Reward:
+Food ×1
+```
+
+Habit 类型可以预设：
+
+```text
+Study
+Work
+Reading
+Exercise
+Custom
+```
+
+每个 Habit 可以设置对应奖励。
+
+第一版建议主要资源：
+
+```text
+Food
+XP
+Coin
+```
+
+---
+
+# 10. Study Timer
+
+对于“每天学习 30 分钟”，Watch 可以提供 Focus Timer。
+
+用户：
+
+```text
+Japanese
+0 / 30 min
+
+[Start]
+```
+
+开始：
+
+```text
+Focus
+18:24 remaining
+
+🐣 studying too...
+```
+
+完成：
+
+```text
+Japanese
+30 / 30 ✓
+
+Reward unlocked
+
+🍖 ×1
+```
+
+宠物可以同时显示：
+
+📖 学习动画。
+
+这样用户产生：
+
+> “我和宠物一起学习。”
+
+而不只是倒计时。
+
+---
+
+# 11. Water System
+
+饮水属于用户主动打卡。
+
+例如：
+
+```text
+Water
+
+4 / 6
+
+[ + Drink ]
+```
+
+点击：
+
+```text
+User water count +1
+Pet Hydration +15
+```
+
+宠物动画：
+
+```text
+🐣💧
+```
+
+为了避免鼓励异常饮水行为，游戏奖励不应该要求极端次数。
+
+用户设置的饮水目标更多作为 Habit，而非医疗建议。
+
+---
+
+# 12. HealthKit — Steps
+
+用户授权后读取当天步数。
+
+对于累计量，可以使用 HealthKit statistical query 对指定时间范围进行统计；Apple 的 `HKStatisticsQuery` 支持对 cumulative quantity 计算 sum。:chatgpt-content-reference{index="1"}
+
+逻辑：
+
+```text
+HealthKit
+     ↓
+00:00 → current time
+     ↓
+Today's Steps
+     ↓
+Pet Engine
+```
+
+例如：
+
+```text
+< 2,000
+Mood bonus = 0
+
+2,000–4,999
+Mood bonus = +5
+
+5,000–7,999
+Mood bonus = +10
+
+8,000+
+Mood bonus = +15
+```
+
+这里需要防止重复奖励。
+
+正确设计：
+
+```text
+today_step_reward_level
+```
+
+例如：
+
+用户第一次达到：
+
+```text
+5000
+```
+
+获得：
+
+```text
++10
+```
+
+之后从：
+
+```text
+5200 → 5800
+```
+
+不能重复获得 +10。
+
+---
+
+# 13. “遛宠物”玩法
+
+步数可以进一步包装成游戏机制。
+
+宠物：
+
+> I want to go outside 🥺
+
+Watch：
+
+```text
+Take a walk?
+
+[Let's go]
+```
+
+用户现实中步行。
+
+例如：
+
+```text
+Start:
+4,221 steps
+
+Finish:
+5,468 steps
+
+Walk:
+1,247 steps
+```
+
+奖励：
+
+```text
+Mood +15
+Bond +5
+XP +10
+```
+
+这种设计能够让 HealthKit 与宠物互动自然结合。
+
+---
+
+# 14. HealthKit — Sleep
+
+睡眠采用 HealthKit `sleepAnalysis`。
+
+HealthKit 当前可以表示：
+
+- Awake
+- Core
+- Deep
+- REM
+- Asleep Unspecified
+
+等睡眠状态；Apple 也说明可根据这些 sample 的起止时间计算总睡眠时间等统计值。:chatgpt-content-reference{index="2"}
+
+第一版核心只计算：
+
+```text
+totalSleepMinutes
+```
+
+例如：
+
+```text
+Sleep:
+6h 42m
+```
+
+映射 Pet Energy：
+
+```text
+8h+       100
+7–8h       85
+6–7h       70
+5–6h       50
+<5h        35
+```
+
+后续更合理的方式是根据：
+
+```text
+user_sleep_target
+```
+
+计算：
+
+```text
+sleep_ratio =
+actual_sleep / target_sleep
+```
+
+再映射 Energy。
+
+---
+
+# 15. 睡眠反馈
+
+早晨打开 Watch：
+
+```text
+🐣🥱
+
+Good morning.
+
+Last night:
+6h 12m
+
+Energy:
+58
+```
+
+AI 可以根据数据生成一句简短反馈：
+
+> We didn't sleep much last night. Let's take it a little easier today.
+
+这属于 wellness feedback。
+
+系统不进行：
+
+```text
+疾病诊断
+睡眠障碍诊断
+心血管判断
+医疗治疗建议
+```
+
+---
+
+# 16. Pet Mood
+
+Mood 来源于多个因素：
+
+```text
+Steps
++
+Habit completion
++
+Pet interaction
++
+Hunger status
++
+Sleep/Energy
+```
+
+例如：
+
+```text
+Base Mood = 50
+
+Steps bonus      +10
+Habit bonus      +10
+Fed today         +5
+Critical hunger  -30
+Low energy       -10
+```
+
+最终：
+
+```text
+Mood = clamp(0,100)
+```
+
+---
+
+# 17. Bond System
+
+Bond 表示用户和宠物之间的关系。
+
+来源：
+
+```text
+Feed
+Play
+Complete habit
+Walk together
+Talk
+Maintain pet health
+```
+
+Bond 会影响 AI 的语言。
+
+例如：
+
+### Bond 10
+
+> Hello. It's time for your study session.
+
+### Bond 50
+
+> Japanese time again! I'll study with you.
+
+### Bond 90
+
+> You usually start Japanese around now. Don't tell me you're planning to skip my dinner 😾
+
+这样关系成长可以被用户明显感知。
+
+---
+
+# 18. Evolution System
+
+宠物进化由用户真实行为决定。
+
+后台维护行为统计：
+
+```text
+study_score
+activity_score
+consistency_score
+sleep_score
+```
+
+例如：
+
+### Scholar Path
+
+如果：
+
+```text
+study_score highest
+```
+
+进化：
+
+```text
+🐣
+ ↓
+📚 Scholar
+ ↓
+🧙 Sage
+```
+
+### Explorer Path
+
+```text
+activity_score highest
+```
+
+进化：
+
+```text
+🐣
+ ↓
+🏃 Explorer
+ ↓
+🧭 Adventurer
+```
+
+### Guardian Path
+
+如果：
+
+```text
+各项均衡
+```
+
+进化：
+
+```text
+🐣
+ ↓
+🌱 Guardian
+ ↓
+✨ Spirit
+```
+
+用户不会直接点击选择进化。
+
+**现实生活方式决定宠物成长方向。**
+
+---
+
+# 19. AI Pet Brain
+
+AI Pet Brain 负责四项任务：
+
+**Context-aware dialogue**
+
+**Personalized reminder**
+
+**Long-term memory**
+
+**Daily reflection**
+
+---
+
+# 20. Context Builder
+
+不能简单把数据库全部发送给 LLM。
+
+Backend 先构造结构化 context：
+
+```text
+PET
+Name: Mochi
+Personality: playful
+Level: 8
+Bond: 72
+Hunger: 21
+Energy: 58
+Mood: 66
+
+TODAY
+Japanese: 0 / 30 min
+Water: 4 / 6
+Steps: 5260
+Sleep: 6h12m
+
+TIME
+21:13
+
+RECENT
+Last Japanese reminder ignored.
+
+MEMORY
+User usually studies Japanese after dinner.
+User completed Japanese 5 of the last 7 days.
+```
+
+然后交给 LLM。
+
+---
+
+# 21. Structured LLM Output
+
+LLM 不直接返回任意文字。
+
+要求返回类似：
+
+```json
+{
+  "emotion": "hungry",
+  "message": "You usually study around now... I'm still waiting for dinner 👀",
+  "suggested_action": "start_japanese",
+  "urgency": "low"
+}
+```
+
+Watch 根据：
+
+```text
+emotion
+```
+
+显示相应动画。
+
+根据：
+
+```text
+suggested_action
+```
+
+显示按钮：
+
+```text
+[Start Japanese]
+```
+
+---
+
+# 22. Personality System
+
+用户可以选择基础性格。
+
+例如：
+
+```text
+Gentle
+Playful
+Tsundere
+Energetic
+Calm
+```
+
+Prompt 中加入：
+
+```text
+Personality:
+Tsundere
+
+Rules:
+- teasing but friendly
+- concise
+- never insulting
+- max 25 words
+```
+
+这样宠物语言具有一致性。
+
+---
+
+# 23. 提醒系统
+
+提醒分成两种。
+
+### Rule-based Reminder
+
+例如：
+
+```text
+Habit deadline approaching
+Hunger low
+Water target incomplete
+Bedtime approaching
+```
+
+这些触发条件由普通程序判断。
+
+### AI-generated Reminder
+
+触发后再让 LLM决定如何表达。
+
+架构：
+
+```text
+Rule Engine
+    ↓
+Should remind?
+    ↓ YES
+Context Builder
+    ↓
+Memory Retrieval
+    ↓
+LLM
+    ↓
+Pet Notification
+```
+
+这样不会依赖 LLM 决定什么时候发送提醒。
+
+---
+
+# 24. Long-Term Memory
+
+这是整个 AI 系统最重要的高级功能。
+
+用户与宠物发生互动后，系统判断其中是否存在值得长期保存的信息。
+
+例如：
+
+用户：
+
+> I normally study Japanese after dinner.
+
+生成 Memory Candidate：
+
+```json
+{
+  "content": "User usually studies Japanese after dinner.",
+  "category": "routine",
+  "importance": 0.82
+}
+```
+
+达到 importance threshold 才写入数据库。
+
+---
+
+# 25. Memory 类型
+
+建议分：
+
+```text
+Preference
+Routine
+Goal
+Habit Pattern
+Pet Interaction
+Personal Fact
+Achievement
+```
+
+例如：
+
+```text
+Preference:
+User prefers short study sessions.
+
+Routine:
+User usually studies after dinner.
+
+Goal:
+User wants to study Japanese daily.
+
+Pattern:
+User often ignores morning study reminders.
+
+Achievement:
+User maintained Japanese habit for seven days.
+```
+
+---
+
+# 26. Embedding + pgvector
+
+每条长期 Memory 生成 embedding：
+
+```text
+Memory
+      ↓
+Embedding Model
+      ↓
+Vector
+      ↓
+PostgreSQL / pgvector
+```
+
+pgvector 可以直接在 PostgreSQL 中存储向量并执行 exact 或 approximate nearest-neighbor search，也支持 cosine distance、HNSW、IVFFlat 等查询方式。:chatgpt-content-reference{index="3"}
+
+数据库：
+
+```text
+Memory
+
+id
+user_id
+content
+category
+importance
+embedding
+created_at
+last_used_at
+```
+
+---
+
+# 27. Memory Retrieval
+
+需要生成 reminder 时：
+
+```text
+Current situation:
+
+Japanese study reminder at night
+```
+
+生成 query embedding。
+
+然后：
+
+```text
+pgvector
+↓
+Top-K relevant memories
+```
+
+例如找到：
+
+```text
+User usually studies Japanese after dinner.
+
+User completed Japanese five nights this week.
+
+User dislikes long study sessions.
+```
+
+再加入 prompt。
+
+第一版：
+
+```text
+Top-K = 3
+```
+
+足够。
+
+---
+
+# 28. Memory Ranking
+
+不能完全依赖 vector similarity。
+
+最终 ranking 可以考虑：
+
+```text
+Final Score =
+Semantic Similarity
++ Importance
++ Recency
+```
+
+例如：
+
+```text
+score =
+0.6 × similarity
++
+0.25 × importance
++
+0.15 × recency
+```
+
+具体权重通过实验决定。
+
+---
+
+# 29. Daily Reflection
+
+每天可以生成一次 Pet Diary。
+
+例如：
+
+```text
+TODAY
+
+📚 Japanese ✓
+💧 Water 5/6
+🚶 7,242 steps
+😴 Last sleep 6h42m
+
+🐣 Mochi
+
+"You studied and took me for a walk today.
+I'm happy... but we're sleeping earlier tonight,
+right?"
+```
+
+同时生成少量长期 memory candidate。
+
+---
+
+# 30. Django Backend
+
+Backend 推荐划分为：
+
+```text
+accounts
+pets
+habits
+health
+interactions
+memory
+ai
+```
+
+职责清晰分离。
+
+---
+
+# 31. 数据模型
+
+核心数据库关系：
+
+```text
+User
+ │
+ ├── Pet
+ │
+ ├── Habit
+ │    └── HabitLog
+ │
+ ├── HealthDailySummary
+ │
+ ├── PetInteraction
+ │
+ └── Memory
+```
+
+Pet：
+
+```text
+owner
+name
+species
+generation
+level
+xp
+hunger
+hydration
+energy
+mood
+bond
+state
+birth_date
+```
+
+Habit：
+
+```text
+user
+name
+category
+target
+unit
+frequency
+reward_type
+reward_amount
+```
+
+HabitLog：
+
+```text
+habit
+date
+progress
+completed
+reward_claimed
+```
+
+HealthDailySummary：
+
+```text
+user
+date
+steps
+sleep_minutes
+```
+
+Memory：
+
+```text
+user
+content
+category
+importance
+embedding
+created_at
+last_used_at
+```
+
+---
+
+# 32. REST API
+
+Watch 主要调用：
+
+```text
+GET /api/today/
+```
+
+一次获得：
+
+```json
+{
+  "pet": {},
+  "habits": [],
+  "health": {},
+  "inventory": {},
+  "message": {}
+}
+```
+
+这样 Watch 不需要连续请求多个 endpoint。
+
+其他接口：
+
+```text
+POST /api/auth/login/
+
+GET /api/pet/
+POST /api/pet/feed/
+
+GET /api/habits/
+POST /api/habits/
+POST /api/habits/{id}/progress/
+POST /api/habits/{id}/complete/
+
+POST /api/health/sync/
+
+POST /api/pet/chat/
+
+POST /api/pet/interact/
+```
+
+---
+
+# 33. Watch App 内部架构
+
+推荐：
+
+```text
+Views
+ViewModels
+Models
+Services
+```
+
+Services：
+
+```text
+HealthKitService
+APIService
+PetService
+HabitService
+NotificationService
+```
+
+例如：
+
+```text
+HomeView
+    ↓
+HomeViewModel
+    ↓
+APIService
+```
+
+HealthKit：
+
+```text
+HealthKitService
+    ↓
+steps()
+sleepSummary()
+```
+
+避免把 HealthKit/API 逻辑直接写在 SwiftUI View 里面。
+
+---
+
+# 34. Health 数据同步原则
+
+Watch 读取：
+
+```text
+Steps
+Sleep
+```
+
+Backend 只存每日 summary。
+
+例如：
+
+```json
+{
+  "date": "2026-10-01",
+  "steps": 6521,
+  "sleep_minutes": 412
+}
+```
+
+不上传完整逐分钟健康记录。
+
+这样：
+
+- 数据更少
+- privacy 更好
+- Backend 简单
+- LLM 不需要原始健康数据
+
+HealthKit 数据访问本身由用户授权控制。:chatgpt-content-reference{index="4"}
+
+---
+
+# 35. Offline Strategy
+
+Apple Watch 暂时没有网络时，核心游戏仍然应该工作。
+
+本地保存：
+
+```text
+Pet snapshot
+Habit progress
+Inventory
+Last Health summary
+Pending actions
+```
+
+例如：
+
+```text
+study completed
+```
+
+先写入本地。
+
+恢复网络后：
+
+```text
+sync
+```
+
+LLM 对话需要网络，但：
+
+```text
+Feed
+Habit
+Water
+Pet state
+```
+
+仍然可用。
+
+---
+
+# 36. AI Evaluation
+
+AI 部分需要真实 evaluation，避免项目沦为 LLM wrapper。
+
+建立固定 scenario dataset。
+
+例如：
+
+```text
+Scenario
+
+Time:
+21:00
+
+Pet Hunger:
+20
+
+Japanese:
+0/30
+
+Memory:
+User usually studies after dinner.
+
+Personality:
+Tsundere
+```
+
+比较：
+
+```text
+System A
+No Memory
+
+System B
+Recent Context
+
+System C
+pgvector Long-Term Memory
+```
+
+---
+
+# 37. AI Evaluation Metrics
+
+评价：
+
+| Metric | 含义 |
+|---|---|
+| Context Relevance | 是否利用当前状态 |
+| Personalization | 是否体现用户特点 |
+| Memory Correctness | 是否正确使用历史记忆 |
+| Personality Consistency | 角色是否稳定 |
+| Actionability | 是否给出合理行动 |
+| Repetition | 是否频繁重复 |
+| Hallucination Rate | 是否编造用户信息 |
+
+可以结合：
+
+**人工评分 + LLM-as-Judge**
+
+最终输出真实实验结果。
+
+---
+
+# 38. Memory Retrieval Evaluation
+
+构造已知目标 memory 的测试集。
+
+例如 query：
+
+```text
+Generate Japanese study reminder.
+```
+
+正确 relevant memory：
+
+```text
+User usually studies Japanese after dinner.
+```
+
+测试：
+
+```text
+Recall@1
+Recall@3
+Recall@5
+```
+
+这样 pgvector 的使用具有明确 evaluation，而非单纯写进 Tech Stack。
+
+---
+
+# 39. Pet Engine Tests
+
+Deterministic game logic必须大量测试。
+
+例如：
+
+```text
+study completion → food +1
+feed → food -1
+feed → hunger +30
+
+step threshold cannot reward twice
+
+sleep updates energy correctly
+
+hunger cannot exceed 100
+
+critical timer works
+
+death condition works
+
+rebirth creates next generation
+
+habit reward cannot be claimed twice
+```
+
+这里是整个 App 最容易展示 software engineering quality 的部分。
+
+---
+
+# 40. API Tests
+
+验证：
+
+```text
+Authentication
+Permission
+Habit CRUD
+Habit completion
+Feed
+Health sync
+Pet state
+AI chat
+Memory retrieval
+```
+
+同时保证：
+
+User A 无法读取 User B 的：
+
+```text
+Pet
+Habit
+Health
+Memory
+```
+
+---
+
+# 41. LLM Failure Handling
+
+LLM 有可能：
+
+```text
+timeout
+invalid JSON
+API error
+unsafe output
+```
+
+所以必须有 fallback。
+
+例如：
+
+```text
+LLM failed
+↓
+Rule-based message
+
+"Japanese goal: 0 / 30 min 📚"
+```
+
+宠物核心功能不能因为 LLM 不可用而瘫痪。
+
+---
+
+# 42. Privacy & Safety
+
+健康数据需要遵循：
+
+**minimum necessary data**
+
+LLM 只得到：
+
+```text
+steps today
+sleep duration
+```
+
+而不是完整 HealthKit raw records。
+
+另外需要明确：
+
+宠物提供的是：
+
+```text
+wellness feedback
+habit feedback
+game feedback
+```
+
+不提供：
+
+```text
+medical diagnosis
+disease prediction
+treatment recommendation
+```
+
+---
+
+# 43. Level 4 最终完成标准
+
+最终项目达到以下状态才算完整：
+
+### Wearable
+
+Apple Watch 真机运行：
+
+```text
+Swift
+SwiftUI
+HealthKit
+Steps
+Sleep
+```
+
+### Game
+
+具有：
+
+```text
+Pet State
+Habit
+Food
+Feed
+Water
+Mood
+Energy
+Bond
+XP
+Growth
+Death
+Rebirth
+Evolution
+```
+
+### AI
+
+具有：
+
+```text
+LLM Pet Brain
+Personality
+Context Builder
+Structured Output
+Context-aware Reminder
+Daily Reflection
+```
+
+### Memory
+
+具有：
+
+```text
+Memory Extraction
+Embedding
+pgvector
+Vector Retrieval
+Importance
+Recency
+Top-K Context
+```
+
+### Backend
+
+具有：
+
+```text
+Django
+DRF
+PostgreSQL
+Authentication
+REST API
+Health Sync
+```
+
+### Engineering
+
+具有：
+
+```text
+Docker
+Tests
+CI
+Deployment
+Error Handling
+Privacy Design
+```
+
+### Evaluation
+
+具有真实：
+
+```text
+Pet Engine Tests
+API Tests
+Memory Retrieval Evaluation
+No-Memory vs Memory Comparison
+AI Output Evaluation
+```
+
+### Portfolio
+
+具有：
+
+```text
+Professional README
+Architecture Diagram
+AI Pipeline Diagram
+Watch Screenshots
+Real Watch Demo Video
+Evaluation Results
+Clear Limitations
+```
+
+---
+
+# 44. 项目的最终技术定位
+
+最终这个项目可以描述为：
+
+> **An AI-powered virtual pet for Apple Watch whose survival and evolution are driven by the user's real-world habits, activity, and sleep.**
+
+技术描述：
+
+> The system integrates native watchOS and HealthKit data with a Django REST backend, PostgreSQL/pgvector long-term memory, deterministic game-state logic, and an LLM-based personalized pet interaction engine.
+
+核心 AI 特性：
+
+> The virtual pet builds long-term semantic memories from user interactions and behavioral patterns, retrieves contextually relevant memories using vector search, and uses them together with real-time habit and wellness context to generate personalized interactions.
+
+核心产品特性：
+
+> Real-world self-care becomes virtual pet care: studying earns food, walking improves mood, hydration keeps the pet healthy, and sleep affects its energy.
+
+这三个层次——**Wearable Product + Production Backend + Evaluated AI Memory System**——共同构成项目最终的 Level 4 完成形态。
+
+这版可以直接作为后续设计数据库、API、Swift 架构和 AI evaluation 时的**母规格说明书**；核心 scope 已经固定，而且 `HealthKit → Pet Engine → Context Builder → pgvector Memory → LLM` 这条技术主线也足够清楚。

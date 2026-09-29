@@ -1,0 +1,7 @@
+.git
+.venv
+work
+.env
+watch/.build
+__pycache__
+evaluation/results

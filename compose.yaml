@@ -1,0 +1,42 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.2-pg18
+    environment:
+      POSTGRES_DB: habitpet
+      POSTGRES_USER: habitpet
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U habitpet -d habitpet]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: '5432'
+      DB_NAME: habitpet
+      DB_USER: habitpet
+    ports:
+      - 127.0.0.1:8000:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [sh, -c, 'python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60 --access-logfile -']
+  jobs:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: '5432'
+      DB_NAME: habitpet
+      DB_USER: habitpet
+    depends_on:
+      api:
+        condition: service_started
+    command: [sh, -c, 'while true; do python manage.py run_jobs; sleep 900; done']
+volumes:
+  pgdata:

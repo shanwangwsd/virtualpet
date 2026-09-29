@@ -1,0 +1,26 @@
+name: HabitPet
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    watchOS: '10.0'
+targets:
+  HabitPet:
+    type: application
+    platform: watchOS
+    sources:
+      - path: HabitPet
+        excludes: [Info.plist, HabitPet.entitlements]
+    info:
+      path: HabitPet/Info.plist
+    entitlements:
+      path: HabitPet/HabitPet.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.habitpet
+        SWIFT_VERSION: '5.0'
+        TARGETED_DEVICE_FAMILY: '4'
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: HabitPet/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HabitPet/HabitPet.entitlements
+        SDKROOT: watchos

@@ -1,0 +1,23 @@
+{
+  "mode": "demo",
+  "embedding": "demo-hash-v1",
+  "model": "none",
+  "scenarios": 12,
+  "response_count": 36,
+  "fallback_count": 0,
+  "no_relevance_abstention": [
+    true
+  ],
+  "retrieval": {
+    "recall@1": 1.0,
+    "recall@3": 1.0,
+    "recall@5": 1.0
+  },
+  "limitations": [
+    "Small synthetic smoke dataset, not independent empirical evidence.",
+    "Demo hash vectors are lexical, not semantic; no claim of LLM quality.",
+    "Recall is undefined for no-relevant-memory cases; these are excluded.",
+    "Human scores are blank until real raters complete them.",
+    "Similarity/importance/recency weights have not been tuned on this test set."
+  ]
+}

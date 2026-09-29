@@ -1,0 +1,35 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+DB95BDDA407641D373CC0051 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/APIClient.swift"; sourceTree = "<group>"; };
+33ED262B8D5388BCC4922A3E = { isa = PBXBuildFile; fileRef = DB95BDDA407641D373CC0051; };
+A9EF173F088B9B02D0821E12 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/AppStore.swift"; sourceTree = "<group>"; };
+9D1E5254A9A43E5F90D63FEC = { isa = PBXBuildFile; fileRef = A9EF173F088B9B02D0821E12; };
+BF40405F75653451FA35AD42 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/Core/Models.swift"; sourceTree = "<group>"; };
+5FCAC0C03C3D3973FB70A9CF = { isa = PBXBuildFile; fileRef = BF40405F75653451FA35AD42; };
+FFDC37C3119ECD4528DD9D49 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/HabitPetApp.swift"; sourceTree = "<group>"; };
+63C6E2E2A4618C2EC47EC625 = { isa = PBXBuildFile; fileRef = FFDC37C3119ECD4528DD9D49; };
+66893FA579079FBF7721491D = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/HealthKitService.swift"; sourceTree = "<group>"; };
+9482A8F33F84B8EC53636736 = { isa = PBXBuildFile; fileRef = 66893FA579079FBF7721491D; };
+CAF21BEBA034D8CCA828D08F = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/KeychainStore.swift"; sourceTree = "<group>"; };
+926A0451E43741B8F7F6C12B = { isa = PBXBuildFile; fileRef = CAF21BEBA034D8CCA828D08F; };
+001EBEB02DC6D27ADCD7D8D5 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/NotificationService.swift"; sourceTree = "<group>"; };
+08A74979A5EB19EF393C897B = { isa = PBXBuildFile; fileRef = 001EBEB02DC6D27ADCD7D8D5; };
+3906D6680CB5436136749671 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/PushDelegate.swift"; sourceTree = "<group>"; };
+242F7DDF9AA8F959FF11964E = { isa = PBXBuildFile; fileRef = 3906D6680CB5436136749671; };
+8799FA1139F5504FAE833580 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitPet/Views.swift"; sourceTree = "<group>"; };
+D55D64D84B2CFC81557385E2 = { isa = PBXBuildFile; fileRef = 8799FA1139F5504FAE833580; };
+A8792157CB4F27FB949C035F = { isa = PBXFileReference; explicitFileType = wrapper.application; path = HabitPet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+0A3E27B8CA818264D75C8D81 = { isa = PBXGroup; children = (A8792157CB4F27FB949C035F,); name = Products; sourceTree = "<group>"; };
+AD936FCBED631FA67E05C3EA = { isa = PBXGroup; children = (DB95BDDA407641D373CC0051,A9EF173F088B9B02D0821E12,BF40405F75653451FA35AD42,FFDC37C3119ECD4528DD9D49,66893FA579079FBF7721491D,CAF21BEBA034D8CCA828D08F,001EBEB02DC6D27ADCD7D8D5,3906D6680CB5436136749671,8799FA1139F5504FAE833580,0A3E27B8CA818264D75C8D81,); sourceTree = "<group>"; };
+878A52FC5FF6A57D50B7B870 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (33ED262B8D5388BCC4922A3E,9D1E5254A9A43E5F90D63FEC,5FCAC0C03C3D3973FB70A9CF,63C6E2E2A4618C2EC47EC625,9482A8F33F84B8EC53636736,926A0451E43741B8F7F6C12B,08A74979A5EB19EF393C897B,242F7DDF9AA8F959FF11964E,D55D64D84B2CFC81557385E2,); runOnlyForDeploymentPostprocessing = 0; };
+E2AA269EB967A8853A258BFA = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+41D311A605520FC7B8B9A980 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+2B23A31EEC75B029432F2445 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; WATCHOS_DEPLOYMENT_TARGET = 10.0; SDKROOT = watchos; }; name = Debug; };
+EDDA600A3F771F810A8065C9 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; WATCHOS_DEPLOYMENT_TARGET = 10.0; SDKROOT = watchos; PRODUCT_BUNDLE_IDENTIFIER = com.example.habitpet; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = 4; SUPPORTED_PLATFORMS = "watchos watchsimulator"; INFOPLIST_FILE = HabitPet/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_ENTITLEMENTS = HabitPet/HabitPet.entitlements; CODE_SIGN_STYLE = Automatic; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SKIP_INSTALL = NO; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; }; name = Debug; };
+07CA1E69F6068DEA30A4DA6B = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; WATCHOS_DEPLOYMENT_TARGET = 10.0; SDKROOT = watchos; }; name = Release; };
+594BCDCC96599D88EF772A08 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; WATCHOS_DEPLOYMENT_TARGET = 10.0; SDKROOT = watchos; PRODUCT_BUNDLE_IDENTIFIER = com.example.habitpet; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = 4; SUPPORTED_PLATFORMS = "watchos watchsimulator"; INFOPLIST_FILE = HabitPet/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_ENTITLEMENTS = HabitPet/HabitPet.entitlements; CODE_SIGN_STYLE = Automatic; SWIFT_OPTIMIZATION_LEVEL = "-O"; SKIP_INSTALL = NO; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; }; name = Release; };
+F905B102B4F13BD6617D8EB3 = { isa = XCConfigurationList; buildConfigurations = (2B23A31EEC75B029432F2445,07CA1E69F6068DEA30A4DA6B,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+CE4CD5ACDBC4A8D938AD23C0 = { isa = XCConfigurationList; buildConfigurations = (EDDA600A3F771F810A8065C9,594BCDCC96599D88EF772A08,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+34A04005BCAF206EEC990BD9 = { isa = PBXNativeTarget; buildConfigurationList = CE4CD5ACDBC4A8D938AD23C0; buildPhases = (878A52FC5FF6A57D50B7B870,E2AA269EB967A8853A258BFA,41D311A605520FC7B8B9A980,); buildRules = (); dependencies = (); name = HabitPet; productName = HabitPet; productReference = A8792157CB4F27FB949C035F; productType = "com.apple.product-type.application"; };
+244210E48437B6556980A702 = { isa = PBXProject; attributes = { LastUpgradeCheck = 1600; }; buildConfigurationList = F905B102B4F13BD6617D8EB3; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base,); mainGroup = AD936FCBED631FA67E05C3EA; productRefGroup = 0A3E27B8CA818264D75C8D81; projectDirPath = ""; projectRoot = ""; targets = (34A04005BCAF206EEC990BD9,); };
+}; rootObject = 244210E48437B6556980A702; }

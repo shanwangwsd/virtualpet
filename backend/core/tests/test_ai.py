@@ -62,7 +62,7 @@ def test_provider_failure_degrades_without_state_mutation(monkeypatch, settings)
 
 def test_demo_memory_extraction_only_explicit_remember():
     assert ai.extract_candidate("hello there") is None
-    assert ai.extract_candidate("记住：我喜欢晚饭后学日语")["content"] == "我喜欢晚饭后学日语"
+    assert ai.extract_candidate("Remember: I like studying Japanese after dinner")["content"] == "I like studying Japanese after dinner"
 
 
 def test_retrieval_can_abstain_when_all_memories_are_unrelated():
@@ -71,3 +71,18 @@ def test_retrieval_can_abstain_when_all_memories_are_unrelated():
     Profile.objects.filter(user=user).update(memory_enabled=True)
     ai.save_memory(user, "blue violet painting", "preference")
     assert ai.retrieve(user, "Japanese dinner coding", 3) == []
+
+
+def test_english_replies_for_demo_and_failure(settings, monkeypatch):
+    user = get_user_model().objects.create_user('english_pet')
+    settings.AI_MODE = 'demo'
+    demo = ai.respond(user, 'Hello')
+    assert demo['message'].isascii()
+    assert 0 < len(demo['message']) <= 160
+    settings.AI_MODE = 'live'
+    def fail(*args, **kwargs):
+        raise TimeoutError('provider unavailable')
+    monkeypatch.setattr(ai, 'completion', fail)
+    fallback = ai.respond(user, 'Hello')
+    assert fallback['message'].isascii()
+    assert fallback['source'] == 'fallback'

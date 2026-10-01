@@ -9,17 +9,17 @@ T = datetime(2026, 1, 1, tzinfo=timezone.utc)
 def test_decay_retains_partial_period_and_is_idempotent():
     pet = PetState(updated_at=T)
     advance(pet, T + timedelta(hours=5))
-    assert pet.hunger == 65
-    advance(pet, T + timedelta(hours=7))
-    assert pet.hunger == 65
-    advance(pet, T + timedelta(hours=8))
     assert pet.hunger == 60
+    advance(pet, T + timedelta(hours=7))
+    assert pet.hunger == 60
+    advance(pet, T + timedelta(hours=10))
+    assert pet.hunger == 50
 
 
 def test_death_uses_actual_crossing_time_not_refresh_time():
     pet = PetState(hunger=5, updated_at=T)
     advance(pet, T + timedelta(hours=53))
-    assert pet.critical_since == T + timedelta(hours=4)
+    assert pet.critical_since == T + timedelta(hours=5)
     assert pet.state == "dead"
 
 

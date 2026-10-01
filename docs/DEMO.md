@@ -1,18 +1,18 @@
-# 求职展示与真机演示脚本
+# Portfolio and Physical-Watch Demo
 
-1. 打开 Watch，展示 Mochi、饱腹值、等级和库存。
-2. 创建日语学习习惯，开始计时；演示期间可用短目标或手动确认，说明没有伪装实际学习时间。
-3. 完成后获得食物，主动喂食，展示库存扣减和宠物变化。
-4. 关闭网络，完成另一习惯并喂食，展示待同步标识；重新打开 App，队列仍存在。
-5. 恢复网络，展示同步后库存一致；说明服务端操作 UUID 去重和事务。
-6. 展示授权后的真实步数/睡眠；无数据时保留真实空状态，不用模拟数字冒充真机采集。
-7. 开启长期记忆，发送“记住：我喜欢晚饭后学习”，再请求建议，展示记忆列表及删除。
-8. 展示 AI_MODE=demo/live 的明确标签，不能把 demo 规则回复说成真实 LLM。
-9. 展示测试结果、并发喂食测试、A/B/C 评估脚本和真实已跑的结果。
-10. 讲清限制：真实模型评估、Watch后台/耗电、生产限流、模型提供商数据处理。
+1. Show Mochi, fullness, level, and inventory on the Watch.
+2. Create a Japanese study habit and start focus. Use a short target or manual completion for the recording, and explain that this is a demonstration.
+3. Complete it, receive food, feed explicitly, and show inventory and pet changes.
+4. Disconnect, complete another habit, and feed. Show pending actions; restart to demonstrate persistence.
+5. Reconnect and show consistent inventory. Explain action UUIDs and database transactions.
+6. Show actual authorized steps/sleep. If unavailable, show the honest empty state rather than presenting simulated data as real.
+7. Add a Schedule reminder a few minutes ahead and expand the delivered Mochi notification.
+8. Tap Drink/Play while the backend is unreachable. Show immediate pet feedback, responsive navigation, and the honest pending/sync status; reconnect and retry.
+9. Show test results, concurrent feeding checks, and the A/B/C evaluation tools with their actual results.
+10. Discuss limitations: real-provider evaluation, background behavior, battery use, production rate limits, and provider data handling.
 
-建议截图：主页、习惯完成、专注计时、离线队列、健康空状态/已授权状态、记忆列表。
+Suggested screenshots: home, habit completion, focus timer, offline queue, missing/authorized health data, and Schedule.
 
-建议架构讲解：哪些操作是确定性事务，哪些是非确定性 AI；健康授权与 AI 摘要授权为何分开；为什么固定用户范围后再检索向量。
+Architecture talking points: deterministic transactions versus nondeterministic AI; separate HealthKit and AI-summary permissions; local scheduling versus optional server AI reminders.
 
-最终录像需要你在手表上真实操作并录制。当前仓库不附虚构真机截图或伪造研究评分。
+Record actual device interactions yourself. The repository does not include fabricated Watch screenshots or research ratings.

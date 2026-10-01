@@ -14,8 +14,37 @@ public struct Pet: Codable, Equatable {
     public var evolution: String
     public var updatedAt: Date
     public var criticalSince: Date? = nil
+    public var lastDecayAt: Date? = nil
+    public var waterZeroSince: Date? = nil
+    public var restAt: Date? = nil
+    public var sleepDeprivedUntil: Date? = nil
+    public var fitness: Int? = nil
+    public var fitnessStatus: String? = nil
+    var fitnessValue: Int { max(0,min(100,fitness ?? 50)) }
+    public var species: String? = nil
+    public var gender: String? = nil
+    public var initialAgeDays: Int? = nil
+    public var ageDays: Int? = nil
+    public var bornAt: Date? = nil
+    public var diedAt: Date? = nil
+    public var detailsConfigured: Bool? = nil
+    var appearance: PetAppearance { PetAppearance(name: name, species: species ?? "cat") }
+    var genderLabel: String {
+        switch gender { case "male": return "Male"; case "female": return "Female"; default: return "Unspecified" }
+    }
+    func currentAgeDays(at date: Date) -> Int {
+        guard let birth = bornAt else { return ageDays ?? 0 }
+        return max(0, Int((diedAt ?? date).timeIntervalSince(birth) / 86400))
+    }
+    var xpIntoLevel: Int { xp % 100 }
+    var xpUntilNextLevel: Int { 100 - xpIntoLevel }
 }
-public struct Inventory: Codable, Equatable { public var food: Int; public var coin: Int }
+struct PetAppearance: Codable, Equatable, Hashable {
+    var name = "Mochi"
+    var species = "cat"
+}
+
+public struct Inventory: Codable, Equatable { public var food: Int; public var coin: Int; var items: [StockItem]? = nil }
 public struct Habit: Codable, Identifiable, Equatable {
     public var id: Int
     public var name: String
@@ -32,6 +61,15 @@ public struct HealthSummary: Codable, Equatable {
     public var steps: Int
     public var sleepMinutes: Int?
     public var stepReward: Int
+    public var fitnessTimezone: String? = nil
+    public var fitnessStartedOn: String? = nil
+    public var lastStepSettlementDate: String? = nil
+    public var lastSleepSettlementDate: String? = nil
+    public var sleepDate: String? = nil
+    public var sleepPreviewMinutes: Int? = nil
+    public var stepDeltaPreview: Int? = nil
+    public var sleepDeltaPreview: Int? = nil
+    public var sleepSettledToday: Bool? = nil
 }
 public struct PetMessage: Codable, Equatable {
     public var emotion: String
@@ -57,7 +95,10 @@ public struct Snapshot: Codable, Equatable {
     public var habits: [Habit]
     public var health: HealthSummary
     public var waterCount: Int
+    public var careBonusClaimed: Bool? = nil
     public var message: PetMessage
+    var pendingRewards: [PendingReward]? = nil
+    var personality: String? = nil
 }
 public struct PendingAction: Codable, Identifiable, Equatable {
     public var id: UUID
@@ -91,7 +132,7 @@ public enum Projection {
     public static func apply(_ actions: [PendingAction], to snapshot: Snapshot, now: Date? = nil) -> Snapshot {
         var result = snapshot
         for action in actions where action.generation == result.pet.generation {
-            if now != nil { advance(&result.pet,to:action.occurredAt) }
+            if now != nil { PetRules.advance(&result.pet,to:action.occurredAt) }
             if result.pet.state == "dead" { continue }
             switch action.kind {
             case "complete", "progress":
@@ -99,45 +140,37 @@ public enum Projection {
                 result.habits[index].progress = action.kind == "complete" ? result.habits[index].target : min(result.habits[index].target,result.habits[index].progress + max(0,action.payload["amount"] ?? 0))
                 if result.habits[index].progress >= result.habits[index].target {
                     result.habits[index].completed=true
-                    let habit=result.habits[index]
-                    if habit.rewardType=="food" { result.inventory.food += habit.rewardAmount }
-                    else if habit.rewardType=="coin" { result.inventory.coin += habit.rewardAmount }
-                    else if habit.rewardType=="xp" { result.pet.xp += habit.rewardAmount }
                     result.pet.bond=min(100,result.pet.bond+1)
                 }
-            case "feed":
-                if result.inventory.food>0 && result.pet.hunger<100 {
-                    result.inventory.food -= 1; result.pet.hunger=min(100,result.pet.hunger+30)
-                    result.pet.bond=min(100,result.pet.bond+2); result.pet.xp += 5
-                    result.pet.state=result.pet.hunger<40 ? "hungry" : "healthy"
-                    result.pet.criticalSince=nil
+            case "use_item":
+                guard let id=action.payload["item_id"], let index=result.inventory.items?.firstIndex(where: { $0.id==id && $0.quantity>0 }), let item=result.inventory.items?[index] else { continue }
+                if item.category == "food" {
+                    guard result.pet.hunger<100 else { continue }
+                    result.pet.hunger=min(100,result.pet.hunger+item.effect)
+                    result.pet.criticalSince=nil; result.pet.bond=min(100,result.pet.bond+2); result.pet.xp += 5
+                    result.inventory.food=max(0,result.inventory.food-1)
+                } else {
+                    guard result.pet.mood<100 else { continue }
+                    result.pet.mood=min(100,result.pet.mood+item.effect)
                 }
+                result.inventory.items?[index].quantity -= 1
+                result.pet.restAt=nil
             case "water":
                 result.waterCount += 1
-                if result.waterCount<=6 { result.pet.hydration=min(100,result.pet.hydration+15) }
+                result.pet.hydration=min(100,result.pet.hydration+20); result.pet.waterZeroSince=nil; result.pet.restAt=nil
+            case "rest":
+                if result.pet.restAt == nil { result.pet.restAt=action.occurredAt }
+            case "wake": result.pet.restAt=nil
+            case "claim_reward": result.pendingRewards?.removeAll { $0.id==action.payload["reward_id"] }
             default: break // Complex server-only rewards remain pending, never fabricated locally.
             }
             result.pet.level=result.pet.xp/100+1
         }
-        if let now { advance(&result.pet,to:now) }
+        if let now { PetRules.advance(&result.pet,to:now) }
         return result
     }
-    private static func advance(_ pet: inout Pet, to now: Date) {
-        guard pet.state != "dead",now>=pet.updatedAt else { return }
-        let periods=Int(now.timeIntervalSince(pet.updatedAt)/14400)
-        if pet.hunger==0 && pet.criticalSince==nil { pet.criticalSince=pet.updatedAt }
-        if periods>0 {
-            if pet.hunger>0 && periods*5>=pet.hunger {
-                pet.criticalSince=pet.updatedAt.addingTimeInterval(Double((pet.hunger+4)/5)*14400)
-            }
-            pet.hunger=max(0,pet.hunger-periods*5)
-            pet.hydration=max(0,pet.hydration-periods*5)
-            pet.updatedAt=pet.updatedAt.addingTimeInterval(Double(periods)*14400)
-        }
-        if let critical=pet.criticalSince,now.timeIntervalSince(critical)>=48*3600 { pet.state="dead" }
-        else { pet.state=pet.hunger==0 ? "critical" : pet.hunger<20 ? "very_hungry" : pet.hunger<40 ? "hungry" : "healthy" }
-    }
 }
+
 public struct SleepInterval {
     public var start: Date; public var end: Date
     public init(start: Date, end: Date) { self.start=start; self.end=end }

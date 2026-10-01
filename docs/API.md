@@ -1,37 +1,35 @@
-# API 合同
+# API Contract
 
-除 `/healthz/`、注册、登录、刷新凭证外均需 `Authorization: Bearer <access>`。请求体必须是 JSON 对象。返回 JSON，错误为 DRF 的字段错误或 `detail`。常见状态：400 输入错误、401 重新登录、404 不存在或不属于当前用户、409 状态冲突、429 请求频率超限。
+Except health checks, registration, sign-in, and token refresh, endpoints require `Authorization: Bearer <access>`. Bodies must be JSON objects. Responses use JSON; errors use DRF field errors or `detail`.
 
-| Method | Path | 用途 |
+Common status codes: 400 invalid input, 401 sign-in required, 404 missing/not owned, 409 state conflict, 429 rate limit.
+
+| Method | Path | Purpose |
 |---|---|---|
-| POST | /api/auth/register/ | username/password，返回 access、refresh |
-| POST | /api/auth/login/ | username/password，返回 access、refresh |
-| POST | /api/auth/refresh/ | refresh；轮换并撤销旧 refresh |
-| POST | /api/auth/logout/ | 撤销 refresh；已发出的 access 最长仍有效 30 分钟 |
-| GET | /api/today/ | 结算时间衰减并返回完整快照 |
-| POST | /api/actions/ | 幂等游戏操作 |
-| GET/POST | /api/habits/ | 列出/创建习惯 |
-| GET/PATCH/DELETE | /api/habits/{id}/ | 修改/归档习惯 |
-| POST | /api/health/sync/ | 当天步数、睡眠摘要 |
-| GET/PATCH | /api/profile/ | 时区、性格、健康/记忆开关、睡眠目标、安静时段 |
-| DELETE | /api/account/ | 删除账号及关联数据 |
-| GET | /api/pet/generations/ | 每代档案 |
-| DELETE | /api/sessions/{id}/ | 取消未完成的 focus/walk 会话 |
-| POST | /api/pet/chat/ | message；返回 emotion/message/suggested_action/urgency/source |
-| GET/POST | /api/memories/ | 查看/手动保存记忆 |
-| DELETE | /api/memories/{id}/ | 删除记忆及向量 |
-| GET/POST | /api/diary/ | 最近日记/幂等生成今天日记 |
-| GET | /api/reminders/ | 今日未确认提醒 |
-| POST | /api/reminders/{id}/ack/ | 确认已读 |
-| POST/DELETE | /api/devices/ | APNs token 注册/解除 |
+| POST | /api/auth/register/ | username/password → access and refresh |
+| POST | /api/auth/login/ | username/password → access and refresh |
+| POST | /api/auth/refresh/ | Rotate refresh token and invalidate the previous one |
+| POST | /api/auth/logout/ | Revoke refresh; existing access lasts up to 30 minutes |
+| GET | /api/today/ | Settle time decay and return a full snapshot |
+| POST | /api/actions/ | Idempotent game action |
+| GET/POST | /api/habits/ | List/create habits |
+| GET/PATCH/DELETE | /api/habits/{id}/ | Read/update/archive habit |
+| POST | /api/health/sync/ | Fitness observations, previews, and daily settlement |
+| GET/PATCH | /api/profile/ | Time zone, personality, consent, sleep target, quiet hours |
+| DELETE | /api/account/ | Delete account and associated data |
+| GET | /api/pet/generations/ | Generation history |
+| DELETE | /api/sessions/{id}/ | Cancel focus session |
+| GET | /api/reminders/ | Unacknowledged reminders for today |
+| POST | /api/reminders/{id}/ack/ | Mark reminder read |
+| POST/DELETE | /api/devices/ | Register/remove APNs token |
 
-## 操作
+## Actions
 
-原计划中的 feed/complete/progress/interact 独立写接口统一为 `/api/actions/`，避免 Watch 离线重试走不同幂等路径。所有调用共享同一个所有者行锁。
+The original separate feed, complete, progress, and interaction routes are unified under `/api/actions/` so offline retries use one idempotency path. State changes serialize on the owner row.
 
 ```json
 {
-  "id": "一个UUID",
+  "id": "a-valid-UUID",
   "generation": 1,
   "kind": "complete",
   "occurred_at": "2026-09-29T10:00:00Z",
@@ -39,35 +37,54 @@
 }
 ```
 
-可用 kind：`feed`、`water`、`play`、`complete`、`progress`、`rebirth`、`walk_start`、`walk_finish`、`focus_start`、`focus_finish`。
+Supported kinds: `use_item`, `claim_reward`, `water`, `rest`, `wake`, `complete`, `progress`, `rebirth`, `focus_start`, `focus_finish`.
 
-- progress：payload 为 `habit_id`、正整数 `amount`。
-- complete/focus_start：payload 为 `habit_id`。
-- 其余操作 payload 为空对象。
-- generation 必须匹配当前宠物；重生后旧代操作不会应用到新宠物。
-- 相同用户相同 UUID 和内容返回原结果，不再次执行。
-- 重用同一个 UUID 改内容返回 409。
-- 每日奖励由 HabitLog 唯一约束 + 事务 + RewardLedger 保证。
-- 同一用户的状态修改串行执行，跨用户独立。
-- 重试结果可能是当时的快照，清空队列后必须重新 GET today 获取最新状态。
-- 拒绝的操作不记录为成功。可修正前置条件后重试相同操作。
-- occurred_at 仅审计和有效期校验；不允许客户端设置 XP、库存或历史结算日期。
+- progress needs `habit_id` and positive integer `amount`.
+- complete and focus_start need `habit_id`.
+- `use_item` needs `item_id` from inventory. `claim_reward` needs `reward_id` and integer `category` (0 Food, 1 Toy).
+- Other operations use an empty payload. Legacy `feed` returns a conflict directing the client to select a concrete Food.
+- generation must match the current pet. Old-generation actions never apply to a reborn pet.
+- The same user, UUID, and content return the saved response without another state change.
+- Reusing a UUID with different content returns 409.
+- HabitLog uniqueness, transactions, and RewardLedger prevent duplicate daily rewards.
+- Users serialize independently; one user's lock does not lock every other user.
+- Retry responses can contain the original snapshot. Fetch today again after draining the queue.
+- Rejected actions are not stored as successes. They may be retried after resolving preconditions.
+- `occurred_at` allows ordered replay of saved actions within seven days. The server applies at max(occurred_at, committed pet time), capped at now. It never rewinds an already committed timeline. Drain queued actions before final today/health settlement.
 
 ## Health sync
 
 ```json
-{"steps": 6521, "sleep_minutes": 412, "observed_at": "2026-09-29T10:00:00Z"}
+{"generation": 1, "observed_at": "2026-09-30T04:00:00Z", "days": [{"date": "2026-09-29", "steps": 6521, "sleep_minutes": 480}, {"date": "2026-09-30", "steps": 1200, "sleep_minutes": null}]}
 ```
 
-steps 和 sleep_minutes 均可省略或为 null，表示未知/不更新；真实 0 与未知不同。observed_at 默认服务器当前时间，必须属于用户时区的今天，不能明显在未来。旧于当前 observation 的摘要不覆盖新数据。
+A batch contains at most 15 unique dates from the pet's Fitness activation date through today. Generation must match. Omitted fields mean no update; explicit null means unavailable and settles neutrally. Zero is a measured value. Older observations cannot overwrite newer observations. Future observations are rejected.
 
-steps_observed_at 单独记录有真实步数的摘要时间，散步开始要求 5 分钟内步数基线。步数降低可以更新显示，但不会回收已领取档位，也不会再次发同档奖励。
+Steps settle after the natural day ends. Sleep settles after noon for the previous 18:00–current 12:00 window. A reading must have been taken after its window ended to settle. Unfinished readings only update previews. Each component has an independent contiguous settlement cursor; retries cannot duplicate rewards. Finalized records are immutable. Fitness is clamped to 0–100 after each chronological settlement; reaching zero ends the pet's life.
 
-## 数据限制
+Snapshots expose `fitness`, `fitness_status`, `fitness_started_on`, `fitness_timezone`, `last_step_settlement_date`, `last_sleep_settlement_date`, `step_delta_preview`, `sleep_delta_preview`, and the latest main sleep date/minutes. Fitness fields are on `pet`; tracking and preview fields are on `health`. The time zone is fixed when the generation starts tracking. The legacy single-day health payload remains accepted for compatibility. Walk action kinds are rejected.
 
-- 只支持 daily 习惯频率。
-- habit target 1–10000；reward_amount 1–100。
-- 聊天 1–1000 字符；AI 回复 1–160 字符。
-- 记忆最多 500 字符；1536 维向量；检索过滤用户和 embedding 模型。
-- 凭证、健康摘要、记忆均不得放入 URL 查询参数或公开日志。
-- 服务端存储的 HealthDailySummary 在实现中命名为 Daily，同时保存每日水量和奖励状态。
+## Limits and privacy
+
+- Habit frequency: daily only.
+- Target: 1–10000; reward amount: 1–100.
+- Chat: 1–1000 characters; AI reply: 1–160 characters, instructed to use English.
+- Memory: at most 500 characters, 1536-dimensional embeddings, filtered by user and model.
+- Never place credentials, health summaries, or memory content in URL parameters or public logs.
+- The original HealthDailySummary concept is implemented as Daily, which also holds water and daily reward state.
+
+
+Chat, diary, and memory endpoints have been removed and return 404. Care actions never invoke AI. Remote reminder jobs use current state only, without chat history or saved memories.
+
+## Pet details and growth
+
+`PATCH /api/pet/` accepts required `generation` plus optional `name` (1–40 characters), `species` (`potato`, `cat`), and `personality` (`gentle`, `playful`, `tsundere`, `energetic`, `calm`). Manual age and gender updates are rejected. Age derives only from birth and death timestamps. Appearance changes preserve progression.
+
+Snapshots include `pet.mood`, `last_decay_at`, `critical_since` (Fullness zero clock), `water_zero_since`, `rest_at`, `sleep_deprived_until`, and `visual_state`. Inventory includes concrete `items` with id, key, name, category, effect, asset, quantity. `pending_rewards` lists completion reward IDs, habit names, and dates. A claim chooses exactly one uniformly random item in the selected category; retries keep the same item. An independently repeated claim returns 409. Existing habit reward configuration fields are legacy and do not alter this flow.
+
+`POST /api/pet/reaction/` accepts `action_id`, referencing an owned, confirmed care action for the current living pet. It is an optional, rate-limited call separate from actions; provider failure uses a Personality-specific local response. No Chat endpoint is restored. Consent determines whether health-derived Fitness/Energy and raw health summaries are included. Provider connection configuration is unchanged.
+
+See PET_SYSTEM.md for authoritative current mechanics and ASSETS.md for resource layout.
+
+
+`POST /api/schedule/speech/` accepts `title` (1–80 characters), `hour` (0–23), and `minute` (0–59). It requires authentication, uses the profile Personality and consent-filtered current pet context without memory/history, and returns a PetMessage plus `personality`. It uses the AI throttle. The Watch saves this result into a local repeating notification; the endpoint does not create a server-side schedule. Provider failures return task-specific fallback text with `source=fallback`.

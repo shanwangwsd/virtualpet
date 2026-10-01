@@ -28,5 +28,9 @@ enum KeychainStore {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(updated))
         }
     }
-    static func clear() { SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service] as CFDictionary) }
+    static func clear() { try? clearChecked() }
+    static func clearChecked() throws {
+        let status = SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service] as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
+    }
 }

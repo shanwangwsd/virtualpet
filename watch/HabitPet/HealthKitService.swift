@@ -6,19 +6,32 @@ final class HealthKitService {
     private let stepsType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
     private let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
     func authorize() async throws {
-        guard HKHealthStore.isHealthDataAvailable() else { throw APIError(status: 0, detail: "此设备暂不支持健康数据") }
+        guard HKHealthStore.isHealthDataAvailable() else { throw APIError(status: 0, detail: "Health data is unavailable on this device.") }
         try await store.requestAuthorization(toShare: [], read: [stepsType, sleepType])
     }
-    func summary(timezone identifier: String) async throws -> (steps: Int?, sleep: Int?) {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: identifier) ?? .current
-        let now = Date(); let start = calendar.startOfDay(for: now)
-        // Previous noon → current noon (clipped to now); merge asleep intervals only.
-        let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now)!
-        let windowStart = calendar.date(byAdding: .day, value: -1, to: noon)!
-        async let steps = readSteps(start: start, end: now)
-        async let sleep = readSleep(start: windowStart, end: min(now, noon))
-        return try await (steps, sleep)
+    private var observers: [HKObserverQuery] = []
+    func observeChanges(_ changed: @escaping () -> Void) {
+        guard observers.isEmpty, HKHealthStore.isHealthDataAvailable() else { return }
+        for type in [stepsType as HKSampleType, sleepType as HKSampleType] {
+            let query=HKObserverQuery(sampleType:type,predicate:nil) { _,completion,error in
+                if error == nil { changed() }
+                completion()
+            }
+            observers.append(query); store.execute(query)
+        }
+    }
+    func readBatch(_ batch: FitnessBatch, timezone identifier: String, now: Date) async throws -> [HealthDayInput] {
+        let calendar=FitnessCalendar.calendar(identifier)
+        var result:[HealthDayInput]=[]
+        for day in batch.days {
+            try Task.checkCancellation()
+            let stepWindow=FitnessCalendar.stepWindow(day,calendar:calendar)
+            let sleepWindow=FitnessCalendar.sleepWindow(day,calendar:calendar)
+            async let steps=readSteps(start:stepWindow.start,end:min(now,stepWindow.end))
+            async let sleep=readSleep(start:sleepWindow.start,end:min(now,sleepWindow.end))
+            result.append(try await HealthDayInput(date:FitnessCalendar.key(day,calendar:calendar),steps:steps,sleepMinutes:sleep))
+        }
+        return result
     }
     private func readSteps(start: Date, end: Date) async throws -> Int? {
         try await withCheckedThrowingContinuation { continuation in

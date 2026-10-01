@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import secrets
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -11,8 +12,21 @@ from django.forms.models import model_to_dict
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 
-from . import engine
-from .models import Action, Daily, Habit, HabitLog, Inventory, Pet, Profile, RewardLedger, Session
+from . import engine, fitness
+from .catalog import ITEMS
+from .models import (
+    Action,
+    Daily,
+    Habit,
+    HabitLog,
+    Inventory,
+    InventoryItem,
+    Pet,
+    Profile,
+    RewardChoice,
+    RewardLedger,
+    Session,
+)
 from .serializers import HabitSerializer
 
 
@@ -25,31 +39,25 @@ def lock_owner(user):
     get_user_model().objects.select_for_update().get(pk=user.pk)
 
 
-def context(user, now=None):
+def context(user, now=None, settle=True):
     now = now or timezone.now()
     profile, _ = Profile.objects.get_or_create(user=user)
     pet = Pet.objects.filter(user=user).order_by("-generation").first()
     if pet is None:
-        pet = Pet.objects.create(user=user, born_at=now, updated_at=now)
+        pet = Pet.objects.create(user=user, born_at=now, updated_at=now, last_decay_at=now)
     inventory, _ = Inventory.objects.get_or_create(user=user)
     day = now.astimezone(ZoneInfo(profile.timezone)).date()
     daily, _ = Daily.objects.get_or_create(user=user, date=day)
-    engine.advance(pet, now)
-    if pet.state == "dead" and pet.died_at is None:
-        pet.died_at = pet.critical_since + timedelta(hours=48)
-    pet.save()
+    fitness.initialize(pet, profile, now)
+    if settle:
+        fitness.settle(pet, now)
     return profile, pet, inventory, daily
 
 
-def pet_json(pet, daily, completed):
+def pet_json(pet):
     data = model_to_dict(pet, exclude=["user"])
-    data["mood"] = engine.mood(
-        pet,
-        daily.step_reward,
-        completed,
-        daily.fed,
-        min(daily.play_count, 3) * 3 + (6 if daily.walked else 0),
-    )
+    data["visual_state"] = engine.visual_state(pet)
+    data["fitness_status"] = fitness.status(pet.fitness)
     data["evolution"] = engine.evolution(pet.level, pet.study_score, pet.activity_score)
     data["age_days"] = max(0, ((pet.died_at or timezone.now()) - pet.born_at).days)
     return data
@@ -58,27 +66,34 @@ def pet_json(pet, daily, completed):
 def snapshot(user, ctx=None):
     profile, pet, inventory, daily = ctx or context(user)
     logs = {log.habit_id: log for log in HabitLog.objects.filter(habit__user=user, date=daily.date)}
+    if pet.state != "dead" and pet.hunger >= 70 and pet.mood >= 70 and not daily.care_bonus_claimed:
+        # All snapshot callers hold the owner lock. The daily flag also survives rebirth.
+        engine.gain_xp(pet, 5)
+        daily.care_bonus_claimed = True
+        pet.save(update_fields=["xp", "level"])
+        daily.save(update_fields=["care_bonus_claimed"])
+        RewardLedger.objects.create(user=user, source=f"care:{daily.date}", resource="xp", amount=5)
     habits = []
     for habit in Habit.objects.filter(user=user, active=True).order_by("id"):
         h = HabitSerializer(habit).data
         log = logs.get(habit.pk)
         h.update(progress=log.progress if log else 0, completed=log.completed if log else False)
         habits.append(h)
+    stock = [{**ITEMS[row.item_id], "quantity": row.quantity}
+             for row in InventoryItem.objects.filter(user=user, quantity__gt=0)]
     return {
         "server_time": timezone.now(),
         "date": daily.date,
         "timezone": profile.timezone,
-        "pet": pet_json(pet, daily, sum(log.completed for log in logs.values())),
-        "inventory": {"food": inventory.food, "coin": inventory.coin},
+        "pet": pet_json(pet),
+        "inventory": {"food": sum(row["quantity"] for row in stock if row["category"] == "food"),
+                      "coin": inventory.coin, "items": stock},
+        "personality": profile.personality,
+        "pending_rewards": [{"id": r.id, "habit_id": r.completion.habit_id, "name": r.completion.habit.name, "date": r.completion.date} for r in RewardChoice.objects.filter(completion__habit__user=user, claimed_at__isnull=True).select_related("completion__habit").order_by("id")],
         "habits": habits,
-        "health": {
-            "steps": daily.steps,
-            "sleep_minutes": daily.sleep_minutes,
-            "step_reward": daily.step_reward,
-            "observed_at": daily.health_observed_at,
-            "steps_observed_at": daily.steps_observed_at,
-        },
+        "health": fitness.summary(pet, timezone.now()),
         "water_count": daily.water_count,
+        "care_bonus_claimed": daily.care_bonus_claimed,
         "sessions": [
             {
                 "id": s.id,
@@ -87,11 +102,11 @@ def snapshot(user, ctx=None):
                 "started_at": s.started_at,
                 "start_steps": s.start_steps,
             }
-            for s in Session.objects.filter(user=user, ended_at__isnull=True)
+            for s in Session.objects.filter(user=user, kind="focus", ended_at__isnull=True)
         ],
         "message": {
-            "emotion": "hungry" if pet.hunger < 40 else "happy",
-            "message": "完成一个小目标，一起照顾今天的自己。",
+            "emotion": engine.visual_state(pet),
+            "message": "One small goal. A little care for both of us.",
             "suggested_action": "habits",
             "urgency": "low",
             "source": "rule",
@@ -126,21 +141,9 @@ def complete_progress(user, pet, inventory, daily, habit, amount=None):
         return
     log.progress = min(habit.target, log.progress + amount) if amount is not None else habit.target
     if log.progress >= habit.target:
-        log.completed = log.reward_claimed = True
-        RewardLedger.objects.create(
-            user=user,
-            source=f"habit:{habit.id}:{daily.date}",
-            resource=habit.reward_type,
-            amount=habit.reward_amount,
-        )
-        if habit.reward_type == "xp":
-            engine.gain_xp(pet, habit.reward_amount)
-        else:
-            setattr(
-                inventory,
-                habit.reward_type,
-                getattr(inventory, habit.reward_type) + habit.reward_amount,
-            )
+        log.completed = True
+        log.save()
+        RewardChoice.objects.get_or_create(completion=log)
         pet.bond = engine.clamp(pet.bond + 1)
         pet.completed_habits += 1
         if habit.category in ("study", "reading", "work"):
@@ -166,33 +169,68 @@ def apply_action(user, data):
         if existing.fingerprint != fingerprint:
             raise Conflict("Operation ID was already used with different content")
         return existing.result
-    profile, pet, inventory, daily = context(user, now)
+    current_pet = Pet.objects.filter(user=user).order_by("-generation").first()
+    # Replay saved care in order before the client's final today/health sync.
+    # Never rewind a timeline already committed by another device or worker.
+    action_time = max(min(occurred, now), current_pet.updated_at if current_pet else now)
+    profile, pet, inventory, daily = context(user, action_time)
     if data["generation"] != pet.generation:
         raise Conflict("Pet generation changed; refresh and review this action")
     kind, payload = data["kind"], data["payload"]
     if pet.state == "dead" and kind != "rebirth":
         raise Conflict("Pet has died; rebirth is required")
+    if kind in ("feed", "use_item", "water"):
+        pet.rest_at = None
     if kind == "feed":
-        if inventory.food < 1:
-            raise Conflict("No food available")
-        try:
-            engine.feed(pet)
-        except ValueError as exc:
-            raise Conflict(str(exc))
-        inventory.food -= 1
-        daily.fed = True
-        RewardLedger.objects.create(
-            user=user, source=f"action:{data['id']}", resource="food", amount=-1
-        )
+        raise Conflict("Choose a specific Food item from your inventory")
+    elif kind == "claim_reward":
+        reward = RewardChoice.objects.filter(pk=positive(payload, "reward_id"), completion__habit__user=user).select_related("completion").first()
+        if reward is None:
+            raise NotFound("Reward not found")
+        if reward.claimed_at:
+            raise Conflict("This reward was already claimed")
+        category = payload.get("category")
+        if type(category) is not int or category not in (0, 1):
+            raise ValidationError("Choose Food (0) or Toy (1)")
+        choices = [item for item in ITEMS.values() if item["category"] == ("food" if category == 0 else "toy")]
+        selected = secrets.choice(choices)
+        row, _ = InventoryItem.objects.get_or_create(user=user, item_id=selected["id"])
+        row.quantity += 1
+        row.save()
+        reward.item_id = selected["id"]
+        reward.claimed_at = now
+        reward.save()
+        reward.completion.reward_claimed = True
+        reward.completion.save(update_fields=["reward_claimed"])
+        RewardLedger.objects.create(user=user, source=f"reward:{reward.id}", resource=selected["category"], amount=1)
+    elif kind == "use_item":
+        item_id = positive(payload, "item_id")
+        row = InventoryItem.objects.filter(user=user, item_id=item_id, quantity__gt=0).first()
+        item = ITEMS.get(item_id)
+        if row is None or item is None:
+            raise Conflict("This item is no longer available")
+        if item["category"] == "food":
+            try:
+                engine.feed(pet, item["effect"])
+            except ValueError as exc:
+                raise Conflict(str(exc))
+            daily.fed = True
+        else:
+            if pet.mood >= 100:
+                raise Conflict("Mood is already full")
+            pet.mood = engine.clamp(pet.mood + item["effect"])
+        row.quantity -= 1
+        row.save()
+        RewardLedger.objects.create(user=user, source=f"action:{data['id']}", resource=item["category"], amount=-1)
     elif kind == "water":
         daily.water_count += 1
-        if daily.water_count <= 6:
-            pet.hydration = engine.clamp(pet.hydration + 15)
-    elif kind == "play":
-        daily.play_count += 1
-        if daily.play_count <= 3:
-            pet.bond = engine.clamp(pet.bond + 1)
-            engine.gain_xp(pet, 2)
+        pet.hydration = engine.clamp(pet.hydration + 20)
+        pet.water_zero_since = None
+    elif kind == "rest":
+        if pet.rest_at is None:
+            pet.rest_at = action_time
+    elif kind == "wake":
+        pet.rest_at = None
     elif kind in ("complete", "progress"):
         habit = owned_habit(user, payload)
         complete_progress(
@@ -206,51 +244,37 @@ def apply_action(user, data):
     elif kind == "rebirth":
         if pet.state != "dead":
             raise Conflict("Only a dead pet can be reborn")
-        Session.objects.filter(user=user, ended_at__isnull=True).update(ended_at=now)
+        Session.objects.filter(user=user, kind="focus", ended_at__isnull=True).update(ended_at=now)
         pet = Pet.objects.create(
-            user=user, name=pet.name, generation=pet.generation + 1, born_at=now, updated_at=now
+            user=user, name=pet.name, species=pet.species, gender=pet.gender,
+            generation=pet.generation + 1, born_at=now, updated_at=now, last_decay_at=now
         )
-    elif kind in ("focus_start", "walk_start"):
-        session_kind = kind.split("_")[0]
-        if Session.objects.filter(user=user, kind=session_kind, ended_at__isnull=True).exists():
-            raise Conflict("A session is already active")
-        habit = owned_habit(user, payload) if session_kind == "focus" else None
-        if session_kind == "walk" and (
-            daily.steps_observed_at is None or now - daily.steps_observed_at > timedelta(minutes=5)
-        ):
-            raise Conflict("Sync current steps before starting a walk")
-        if session_kind == "walk" and daily.walked:
-            raise Conflict("Walk reward already earned today")
-        Session.objects.create(user=user, kind=session_kind, habit=habit, start_steps=daily.steps)
-    elif kind in ("focus_finish", "walk_finish"):
-        session_kind = kind.split("_")[0]
-        session = Session.objects.filter(
-            user=user, kind=session_kind, ended_at__isnull=True
-        ).first()
+    elif kind == "focus_start":
+        if Session.objects.filter(user=user, kind="focus", ended_at__isnull=True).exists():
+            raise Conflict("A focus session is already active")
+        habit = owned_habit(user, payload)
+        Session.objects.create(user=user, kind="focus", habit=habit)
+    elif kind == "focus_finish":
+        session = Session.objects.filter(user=user, kind="focus", ended_at__isnull=True).first()
         if not session:
-            raise Conflict("No active session")
+            raise Conflict("No active focus session")
         if session.started_at.astimezone(ZoneInfo(profile.timezone)).date() != daily.date:
             raise Conflict("Session belongs to a previous day; cancel it and start again")
-        if session_kind == "walk":
-            if daily.walked or daily.steps - session.start_steps < 1000:
-                raise Conflict("Walk at least 1000 steps; only one reward per day")
-            daily.walked = True
-            pet.bond = engine.clamp(pet.bond + 5)
-            engine.gain_xp(pet, 10)
-            pet.activity_score += 1
-        else:
-            if not session.habit or not session.habit.active:
-                raise Conflict("Habit is no longer available")
-            elapsed = int((now - session.started_at).total_seconds() // 60)
-            if elapsed < session.habit.target:
-                raise Conflict("Focus target has not elapsed yet")
-            complete_progress(user, pet, inventory, daily, session.habit)
+        if not session.habit or not session.habit.active:
+            raise Conflict("Habit is no longer available")
+        elapsed = int((now - session.started_at).total_seconds() // 60)
+        if elapsed < session.habit.target:
+            raise Conflict("Focus target has not elapsed yet")
+        complete_progress(user, pet, inventory, daily, session.habit)
         session.ended_at = now
         session.save()
+    fitness.initialize(pet, profile, now)
     pet.save()
     inventory.save()
     daily.save()
     result = snapshot(user, (profile, pet, inventory, daily))
+    if kind == "use_item":
+        result["used_item_id"] = payload["item_id"]
     # Persist exactly the JSON wire form for stable retries.
     from rest_framework.renderers import JSONRenderer
 
@@ -271,33 +295,37 @@ def apply_action(user, data):
 def sync_health(user, data):
     lock_owner(user)
     now = timezone.now()
-    profile, pet, inventory, daily = context(user, now)
+    profile, pet, inventory, daily = context(user, now, settle=False)
+    if data.get("generation", pet.generation) != pet.generation:
+        raise Conflict("Pet generation changed; refresh before syncing health")
     observed = data.get("observed_at", now)
-    if (
-        observed > now + timedelta(minutes=5)
-        or observed.astimezone(ZoneInfo(profile.timezone)).date() != daily.date
-    ):
-        raise ValidationError("Health observation must belong to today, not the future")
-    if daily.health_observed_at and observed < daily.health_observed_at:
-        return snapshot(user, (profile, pet, inventory, daily))
-    if data.get("steps") is not None:
-        daily.steps = data["steps"]
-        daily.steps_observed_at = observed
-    daily.health_observed_at = observed
-    daily.step_reward = max(
-        daily.step_reward,
-        15
-        if daily.steps >= 8000
-        else 10
-        if daily.steps >= 5000
-        else 5
-        if daily.steps >= 2000
-        else 0,
-    )
-    if data.get("sleep_minutes") is not None:
-        daily.sleep_minutes = data["sleep_minutes"]
-        if pet.state != "dead":
-            pet.energy = engine.clamp(100 * daily.sleep_minutes / profile.sleep_target)
-    daily.save()
+    if observed > now + timedelta(minutes=5):
+        raise ValidationError("Health observation cannot be in the future")
+    if "days" in data:
+        days = data["days"]
+    else:
+        if observed.astimezone(ZoneInfo(pet.fitness_timezone)).date() != now.astimezone(ZoneInfo(pet.fitness_timezone)).date():
+            raise ValidationError("Legacy health observations must belong to today")
+        days = [{"date": now.astimezone(ZoneInfo(pet.fitness_timezone)).date(), **{k: data[k] for k in ("steps", "sleep_minutes") if k in data}}]
+    fitness.record(pet, days, observed, now)
+    fitness.settle(pet, now)
+    return snapshot(user, (profile, pet, inventory, daily))
+
+
+@transaction.atomic
+def update_pet_details(user, data):
+    lock_owner(user)
+    profile, pet, inventory, daily = context(user)
+    if data["generation"] != pet.generation:
+        raise Conflict("Your pet's generation changed. Refresh before editing.")
+    if pet.state == "dead":
+        raise Conflict("Start a new generation before editing your pet.")
+    for field in ("name", "species"):
+        if field in data:
+            setattr(pet, field, data[field])
+    if "personality" in data:
+        profile.personality = data["personality"]
+        profile.save(update_fields=["personality"])
+    pet.details_configured = True
     pet.save()
     return snapshot(user, (profile, pet, inventory, daily))

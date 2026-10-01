@@ -30,6 +30,7 @@ DATABASES = {
         "PORT": os.getenv("DB_PORT", "55439"),
     }
 }
+LANGUAGE_CODE = "en-us"
 USE_TZ = True
 TIME_ZONE = "UTC"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

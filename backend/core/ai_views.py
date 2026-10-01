@@ -1,98 +1,12 @@
-import logging
-
-import httpx
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
-from . import ai, jobs, services
-from .models import Diary, Interaction, Memory, Profile, Reminder
-
-
-class AIThrottle(UserRateThrottle):
-    scope = "ai"
-
-
-@api_view(["POST"])
-@throttle_classes([AIThrottle])
-def chat(request):
-    message = request.data.get("message")
-    if not isinstance(message, str) or not 1 <= len(message.strip()) <= 1000:
-        raise ValidationError("Message must contain 1–1000 characters")
-    response = ai.respond(request.user, message)
-    interaction = Interaction.objects.create(user=request.user, text=message, response=response)
-    profile = Profile.objects.get(user=request.user)
-    candidate = None
-    if profile.memory_enabled:
-        try:
-            candidate = ai.extract_with_model(message)
-        except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError):
-            logging.getLogger(__name__).warning("memory_extraction_failed")
-    response = dict(response)
-    response["memory_status"] = "not_requested"
-    if candidate:
-        try:
-            ai.save_memory(request.user, **candidate, source_id=interaction.id)
-            response["memory_status"] = "saved"
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
-            logging.getLogger(__name__).warning("memory_failed type=%s", type(exc).__name__)
-            response["memory_status"] = "failed"
-    return Response(response)
-
-
-@api_view(["GET", "POST"])
-def memories(request):
-    if request.method == "POST":
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if not profile.memory_enabled:
-            raise ValidationError("Enable memory in settings first")
-        content = request.data.get("content", "")
-        category = request.data.get("category", "preference")
-        if (
-            not isinstance(content, str)
-            or not isinstance(category, str)
-            or category not in ai.CATEGORIES
-        ):
-            raise ValidationError("Invalid memory")
-        try:
-            obj = ai.save_memory(request.user, content, category)
-        except ValueError as exc:
-            raise ValidationError(str(exc))
-        return Response({"id": obj.id, "content": obj.content}, status=201)
-    return Response(
-        list(
-            Memory.objects.filter(user=request.user)
-            .order_by("-created_at")
-            .values(
-                "id", "content", "category", "importance", "source", "created_at", "last_used_at"
-            )[:200]
-        )
-    )
-
-
-@api_view(["DELETE"])
-def memory_detail(request, pk):
-    get_object_or_404(Memory, user=request.user, pk=pk).delete()
-    return Response(status=204)
-
-
-@api_view(["GET", "POST"])
-@throttle_classes([AIThrottle])
-def diary(request):
-    if request.method == "POST":
-        obj = jobs.diary(request.user)
-        return Response(
-            {"id": obj.id, "date": obj.date, "summary": obj.summary, "response": obj.response}
-        )
-    return Response(
-        list(
-            Diary.objects.filter(user=request.user)
-            .order_by("-date")
-            .values("id", "date", "summary", "response")[:30]
-        )
-    )
+from . import services
+from .models import Action, Profile, Reminder
 
 
 @api_view(["GET"])
@@ -119,3 +33,64 @@ def acknowledge(request, pk):
     reminder.acknowledged = True
     reminder.save(update_fields=["acknowledged"])
     return Response(status=204)
+
+
+class ReactionThrottle(UserRateThrottle):
+    scope = "ai"
+
+
+@api_view(["POST"])
+@throttle_classes([ReactionThrottle])
+def reaction(request):
+    import uuid
+
+    from . import ai
+    try:
+        operation = uuid.UUID(str(request.data.get("action_id", "")))
+    except ValueError:
+        raise ValidationError("A completed care action is required")
+    action = get_object_or_404(Action, user=request.user, operation_id=operation)
+    if action.kind not in ("water", "use_item", "rest", "wake"):
+        raise ValidationError("This action does not have a care reaction")
+    current = services.today(request.user)
+    if current["pet"]["generation"] != action.generation or current["pet"]["state"] == "dead":
+        raise ValidationError("This pet is no longer active")
+    profile = Profile.objects.get(user=request.user)
+    key = f"reaction:{request.user.pk}:{operation}:{profile.personality}:{profile.ai_health_consent}"
+    result = cache.get(key)
+    if result is None:
+        event = action.kind
+        if action.kind == "use_item":
+            from .catalog import ITEMS
+            item = ITEMS.get(action.result.get("used_item_id"))
+            if item is None:
+                event = "used a care item"  # Old action snapshots did not store the item ID.
+            else:
+                event = f"used {item['category']} {item['name']}"
+        result = ai.respond(request.user, f"React to my completed care action: {event}.", mode="none")
+        cache.set(key, result, 3600)
+    return Response(result)
+
+
+@api_view(["POST"])
+@throttle_classes([ReactionThrottle])
+def schedule_speech(request):
+    import httpx
+    from rest_framework import serializers
+
+    from . import ai
+
+    class Input(serializers.Serializer):
+        title = serializers.CharField(min_length=1, max_length=80, trim_whitespace=True)
+        hour = serializers.IntegerField(min_value=0, max_value=23)
+        minute = serializers.IntegerField(min_value=0, max_value=59)
+
+    data = Input(data=request.data)
+    data.is_valid(raise_exception=True)
+    context = ai.build_context(request.user, "Write my pet's scheduled activity reminder.", mode="none")
+    context["schedule"] = data.validated_data
+    try:
+        result = ai.generate(context)
+    except (httpx.HTTPError, TimeoutError, ValueError, KeyError, TypeError, IndexError):
+        result = ai.fallback(context)
+    return Response({**result, "personality": context["personality"]})

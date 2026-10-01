@@ -1,0 +1,86 @@
+{
+  "pets": [
+    {
+      "id": "potato",
+      "name": "Potato",
+      "states": {
+        "normal": "Pets/Potato/potato_normal",
+        "happy": "Pets/Potato/potato_happy",
+        "sad": "Pets/Potato/potato_sad",
+        "angry": "Pets/Potato/potato_angry",
+        "sick": "Pets/Potato/potato_sick",
+        "dead": "Pets/Potato/potato_dead",
+        "eat": "Pets/Potato/potato_eat",
+        "drink": "Pets/Potato/potato_drink",
+        "play": "Pets/Potato/potato_play",
+        "rest": "Pets/Potato/potato_rest"
+      }
+    },
+    {
+      "id": "cat",
+      "name": "Cat",
+      "states": {
+        "normal": "Pets/Cat/cat_normal",
+        "happy": "Pets/Cat/cat_happy",
+        "sad": "Pets/Cat/cat_sad",
+        "angry": "Pets/Cat/cat_angry",
+        "sick": "Pets/Cat/cat_sick",
+        "dead": "Pets/Cat/cat_dead",
+        "eat": "Pets/Cat/cat_eat",
+        "drink": "Pets/Cat/cat_drink",
+        "play": "Pets/Cat/cat_play",
+        "rest": "Pets/Cat/cat_rest"
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": 1,
+      "key": "food_apple",
+      "name": "Apple",
+      "category": "food",
+      "effect": 15,
+      "asset": "Food/food_apple"
+    },
+    {
+      "id": 2,
+      "key": "food_carrot",
+      "name": "Carrot",
+      "category": "food",
+      "effect": 20,
+      "asset": "Food/food_carrot"
+    },
+    {
+      "id": 3,
+      "key": "food_meal",
+      "name": "Meal",
+      "category": "food",
+      "effect": 35,
+      "asset": "Food/food_meal"
+    },
+    {
+      "id": 4,
+      "key": "toy_ball",
+      "name": "Ball",
+      "category": "toy",
+      "effect": 15,
+      "asset": "Toys/toy_ball"
+    },
+    {
+      "id": 5,
+      "key": "toy_yarn",
+      "name": "Yarn",
+      "category": "toy",
+      "effect": 20,
+      "asset": "Toys/toy_yarn"
+    },
+    {
+      "id": 6,
+      "key": "toy_teddy",
+      "name": "Teddy",
+      "category": "toy",
+      "effect": 30,
+      "asset": "Toys/toy_teddy"
+    }
+  ]
+}

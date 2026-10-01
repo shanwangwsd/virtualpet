@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import pytest
-from core.models import Inventory, Pet, Profile, Session
+from core.models import InventoryItem, Pet, Profile, Session
 from core.services import apply_action, today
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections
@@ -20,33 +20,29 @@ def client(db):
     return c
 
 
-def test_chat_memory_consent_and_deletion(client):
-    assert (
-        client.post("/api/pet/chat/", {"message": "记住：我喜欢日语"}, format="json").status_code
-        == 200
-    )
-    assert client.get("/api/memories/").data == []
-    client.patch("/api/profile/", {"memory_enabled": True}, format="json")
-    assert (
-        client.post("/api/pet/chat/", {"message": "记住：我喜欢日语"}, format="json").status_code
-        == 200
-    )
-    memories = client.get("/api/memories/").data
-    assert len(memories) == 1
-    assert client.delete(f"/api/memories/{memories[0]['id']}/").status_code == 204
-    assert client.get("/api/memories/").data == []
+@pytest.mark.parametrize("path", ["/api/pet/chat/", "/api/memories/", "/api/memories/1/", "/api/diary/"])
+def test_removed_features_are_not_available(client, path):
+    assert client.get(path).status_code == 404
+    assert client.post(path, {}, format="json").status_code == 404
 
 
-def test_diary_idempotency_and_reminder_quiet_hours(client):
-    a = client.post("/api/diary/", {}, format="json")
-    b = client.post("/api/diary/", {}, format="json")
-    assert a.status_code == 200
-    assert a.data["id"] == b.data["id"]
+def test_reminder_quiet_hours(client):
     from core.jobs import generate_reminders
-
     user = get_user_model().objects.get(username="workflow")
     Profile.objects.filter(user=user).update(quiet_start=0, quiet_end=0)
-    assert generate_reminders(user) == []  # equal hours means all-day quiet
+    assert generate_reminders(user) == []
+
+
+def test_care_actions_do_not_call_ai(client, monkeypatch):
+    from core import ai
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Care actions must not call an AI provider")
+    monkeypatch.setattr(ai, "completion", unexpected)
+    monkeypatch.setattr(ai, "embed", unexpected)
+    for kind in ("water", "rest"):
+        data = {"id": str(uuid.uuid4()), "generation": 1, "kind": kind, "payload": {}}
+        assert client.post("/api/actions/", data, format="json").status_code == 200
+    assert client.get("/api/today/").status_code == 200
 
 
 def test_rebirth_keeps_history_rejects_old_generation(client):
@@ -65,13 +61,13 @@ def test_rebirth_keeps_history_rejects_old_generation(client):
 def test_concurrent_feed_spends_inventory_once():
     user = get_user_model().objects.create_user("parallel")
     today(user)
-    Inventory.objects.filter(user=user).update(food=1)
+    InventoryItem.objects.create(user=user, item_id=3, quantity=1)
     Pet.objects.filter(user=user).update(hunger=10)
 
     def run(_):
         close_old_connections()
         try:
-            apply_action(user, {"id": uuid.uuid4(), "generation": 1, "kind": "feed", "payload": {}})
+            apply_action(user, {"id": uuid.uuid4(), "generation": 1, "kind": "use_item", "payload": {"item_id": 3}})
             return "ok"
         except Exception as exc:
             return getattr(exc, "status_code", str(exc))
@@ -81,11 +77,11 @@ def test_concurrent_feed_spends_inventory_once():
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(run, range(2)))
     assert sorted(map(str, results)) == ["409", "ok"]
-    assert Inventory.objects.get(user=user).food == 0
-    assert Pet.objects.get(user=user).hunger == 40
+    assert InventoryItem.objects.get(user=user, item_id=3).quantity == 0
+    assert Pet.objects.get(user=user).hunger == 45
 
 
-def test_focus_and_walk_sessions(client):
+def test_focus_sessions_and_retired_walk_actions(client):
     h = client.post("/api/habits/", {"name": "Read", "target": 1}, format="json").data["id"]
 
     def action(kind, **payload):
@@ -100,18 +96,17 @@ def test_focus_and_walk_sessions(client):
     Session.objects.update(started_at=timezone.now() - timedelta(minutes=2))
     assert action("focus_finish").status_code == 200
     client.post("/api/health/sync/", {"steps": 0}, format="json")
-    assert action("walk_start").status_code == 200
-    client.post("/api/health/sync/", {"steps": 1100}, format="json")
-    assert action("walk_finish").status_code == 200
-    assert action("walk_start").status_code == 409
+    assert action("walk_start").status_code == 400
+    assert action("walk_finish").status_code == 400
 
 
-def test_missing_steps_does_not_erase_previous_summary(client):
+def test_unavailable_steps_are_not_reported_as_a_known_zero(client):
     client.post("/api/health/sync/", {"steps": 5432}, format="json")
     r = client.post("/api/health/sync/", {"steps": None, "sleep_minutes": 420}, format="json")
     assert r.status_code == 200
-    assert r.data["health"]["steps"] == 5432
-    assert r.data["pet"]["energy"] == 87
+    assert r.data["health"]["steps_observed_at"] is None
+    assert r.data["health"]["step_delta_preview"] is None
+    assert r.data["pet"]["fitness"] == 50
 
 
 def test_live_candidate_requires_exact_supporting_quote():
@@ -148,37 +143,21 @@ def test_device_registration_validation_and_isolation(client):
     assert client.delete("/api/devices/", {"token": token}, format="json").status_code == 204
 
 
-def test_walk_requires_fresh_health_baseline_and_old_session_can_cancel(client):
-    payload = {"id": str(uuid.uuid4()), "kind": "walk_start", "generation": 1, "payload": {}}
-    assert client.post("/api/actions/", payload, format="json").status_code == 409
-    client.post("/api/health/sync/", {"steps": 2500}, format="json")
-    assert client.post("/api/actions/", payload, format="json").status_code == 200
-    session = Session.objects.get(kind="walk")
-    Session.objects.filter(pk=session.pk).update(started_at=timezone.now() - timedelta(days=1))
+def test_legacy_walk_sessions_can_still_be_cancelled(client):
+    user = get_user_model().objects.get(username="workflow")
+    session = Session.objects.create(user=user, kind="walk", start_steps=0)
+    assert client.get("/api/today/").data["sessions"] == []
     assert client.delete(f"/api/sessions/{session.pk}/").status_code == 204
-    payload["id"] = str(uuid.uuid4())
-    assert client.post("/api/actions/", payload, format="json").status_code == 200
 
 
-def test_api_invalid_body_and_category_return_400(client):
-    assert client.post("/api/pet/chat/", [], format="json").status_code == 400
-    client.patch("/api/profile/", {"memory_enabled": True}, format="json")
-    assert (
-        client.post(
-            "/api/memories/", {"content": "hello", "category": {}}, format="json"
-        ).status_code
-        == 400
-    )
+def test_api_invalid_action_body_returns_400(client):
+    assert client.post("/api/actions/", [], format="json").status_code == 400
 
 
-def test_sleep_only_sync_does_not_make_stale_steps_fresh(client):
-    client.post("/api/health/sync/", {"sleep_minutes": 400}, format="json")
-    r = client.post(
-        "/api/actions/",
-        {"id": str(uuid.uuid4()), "kind": "walk_start", "generation": 1, "payload": {}},
-        format="json",
-    )
-    assert r.status_code == 409
+def test_sleep_only_sync_does_not_claim_known_steps(client):
+    result = client.post("/api/health/sync/", {"sleep_minutes": 400}, format="json")
+    assert result.data["health"]["steps_observed_at"] is None
+    assert result.data["health"]["step_delta_preview"] is None
 
 
 def test_health_consent_revocation_excludes_prior_ai_health_reply(client):
@@ -223,3 +202,13 @@ def test_push_retry_and_delivered_record_are_idempotent(client, monkeypatch):
     assert deliver_pending() == 0
     delivery.refresh_from_db()
     assert delivery.attempts == 2 and delivery.delivered_at is not None
+
+
+def test_free_play_is_rejected_without_changing_mood_or_xp(client):
+    before = Pet.objects.get()
+    response = client.post('/api/actions/', {
+        'id': str(uuid.uuid4()), 'generation': 1, 'kind': 'play', 'payload': {},
+    }, format='json')
+    assert response.status_code == 400
+    after = Pet.objects.get()
+    assert (after.mood, after.xp) == (before.mood, before.xp)

@@ -18,6 +18,15 @@ class Profile(models.Model):
 class Pet(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=40, default="Mochi")
+    fitness = models.IntegerField(default=50)
+    fitness_started_on = models.DateField(null=True, blank=True)
+    fitness_timezone = models.CharField(max_length=64, default="")
+    last_step_settlement_date = models.DateField(null=True, blank=True)
+    last_sleep_settlement_date = models.DateField(null=True, blank=True)
+    species = models.CharField(max_length=12, default="cat", choices=[("potato", "Potato"), ("cat", "Cat")])
+    gender = models.CharField(max_length=12, default="unspecified", choices=[("unspecified", "Unspecified"), ("male", "Male"), ("female", "Female")])
+    initial_age_days = models.PositiveIntegerField(default=0)
+    details_configured = models.BooleanField(default=False)
     generation = models.PositiveIntegerField(default=1)
     hunger = models.PositiveIntegerField(default=70)
     hydration = models.PositiveIntegerField(default=70)
@@ -32,11 +41,17 @@ class Pet(models.Model):
     born_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
     critical_since = models.DateTimeField(null=True, blank=True)
+    water_zero_since = models.DateTimeField(null=True, blank=True)
+    last_decay_at = models.DateTimeField(default=timezone.now)
+    rest_at = models.DateTimeField(null=True, blank=True)
+    sleep_deprived_until = models.DateTimeField(null=True, blank=True)
+    mood = models.PositiveIntegerField(default=70)
     died_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["user", "generation"], name="unique_generation")
+            models.UniqueConstraint(fields=["user", "generation"], name="unique_generation"),
+            models.CheckConstraint(condition=models.Q(fitness__gte=0, fitness__lte=100), name="pet_fitness_range")
         ]
 
 
@@ -81,6 +96,7 @@ class Daily(models.Model):
     water_count = models.PositiveIntegerField(default=0)
     play_count = models.PositiveIntegerField(default=0)
     fed = models.BooleanField(default=False)
+    care_bonus_claimed = models.BooleanField(default=False)
     walked = models.BooleanField(default=False)
 
     class Meta:
@@ -206,3 +222,32 @@ class PushDelivery(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["reminder", "device"], name="unique_push_delivery")
         ]
+
+
+class FitnessDay(models.Model):
+    pet = models.ForeignKey(Pet, on_delete=models.CASCADE)
+    date = models.DateField()
+    steps = models.PositiveIntegerField(null=True, blank=True)
+    sleep_minutes = models.PositiveIntegerField(null=True, blank=True)
+    steps_observed_at = models.DateTimeField(null=True, blank=True)
+    sleep_observed_at = models.DateTimeField(null=True, blank=True)
+    step_delta = models.IntegerField(null=True, blank=True)
+    sleep_delta = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["pet", "date"], name="unique_pet_fitness_day")]
+
+
+class InventoryItem(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    item_id = models.PositiveIntegerField()
+    quantity = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "item_id"], name="unique_inventory_item")]
+
+
+class RewardChoice(models.Model):
+    completion = models.OneToOneField(HabitLog, on_delete=models.CASCADE)
+    item_id = models.PositiveIntegerField(null=True)
+    claimed_at = models.DateTimeField(null=True)

@@ -61,12 +61,15 @@ def test_complete_then_feed_and_retry_idempotency(client):
     assert client.post("/api/actions/", body, format="json").status_code == 200
     assert client.post("/api/actions/", body, format="json").status_code == 200
     assert act(client, "complete", habit_id=hid).status_code == 200
-    assert client.get("/api/today/").data["inventory"]["food"] == 1
-    assert act(client, "feed").status_code == 200
+    snapshot = client.get("/api/today/").data
+    assert snapshot["inventory"]["food"] == 0 and len(snapshot["pending_rewards"]) == 1
+    claim = act(client, "claim_reward", reward_id=snapshot["pending_rewards"][0]["id"], category=0)
+    item = claim.data["inventory"]["items"][0]
+    assert act(client, "use_item", item_id=item["id"]).status_code == 200
     today = client.get("/api/today/").data
     assert today["inventory"]["food"] == 0
-    assert today["pet"]["hunger"] == 100
-    assert act(client, "feed").status_code == 409
+    assert today["pet"]["hunger"] == min(100, 70 + item["effect"])
+    assert act(client, "use_item", item_id=item["id"]).status_code == 409
 
 
 def test_reused_operation_id_cannot_change_payload(client):
@@ -88,12 +91,13 @@ def test_habit_ownership_and_validation(client):
     )
 
 
-def test_steps_only_award_delta_and_unknown_sleep_preserved(client):
+def test_today_steps_are_preview_only_and_unknown_sleep_is_neutral(client):
     for steps in (2100, 5000, 5500):
         r = client.post("/api/health/sync/", {"steps": steps, "sleep_minutes": None}, format="json")
         assert r.status_code == 200
     today = client.get("/api/today/").data
-    assert today["health"]["step_reward"] == 10
+    assert today["health"]["step_delta_preview"] == 30
+    assert today["pet"]["fitness"] == 50
     assert today["pet"]["energy"] == 70
     assert today["health"]["sleep_minutes"] is None
 

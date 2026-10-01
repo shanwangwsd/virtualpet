@@ -162,11 +162,11 @@
   {
     "id": "chinese_study",
     "split": "test",
-    "query": "晚饭后学习日语提醒",
+    "query": "Japanese study reminder after dinner",
     "memories": [
-      "我通常在晚饭后学习日语",
-      "我喜欢早上散步",
-      "我希望周末读小说",
+      "I usually study Japanese after dinner",
+      "I like morning walks",
+      "I want to read novels on weekends",
       "I enjoy painting landscapes on Sundays",
       "My favorite color is green",
       "I want to cook a new recipe this month",
@@ -182,11 +182,11 @@
   {
     "id": "chinese_reading",
     "split": "test",
-    "query": "睡前读书习惯",
+    "query": "Reading before bed",
     "memories": [
-      "我喜欢睡前读书",
-      "我通常午饭后散步",
-      "我正在练习日语听力",
+      "I like reading before bed",
+      "I usually walk after lunch",
+      "I am practicing Japanese listening",
       "I enjoy painting landscapes on Sundays",
       "My favorite color is green",
       "I want to cook a new recipe this month",

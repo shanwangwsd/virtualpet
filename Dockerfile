@@ -5,6 +5,7 @@ COPY requirements.lock .
 RUN pip install --no-cache-dir -r requirements.lock && useradd --create-home app
 COPY backend ./backend
 COPY evaluation ./evaluation
+COPY watch/HabitPet/Assets/catalog.json ./watch/HabitPet/Assets/catalog.json
 USER app
 WORKDIR /app/backend
 EXPOSE 8000

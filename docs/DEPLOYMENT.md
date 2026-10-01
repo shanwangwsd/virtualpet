@@ -1,54 +1,54 @@
-# 部署操作清单
+# Deployment Guide
 
-部署配置已准备，尚未登录云平台、开通付费资源、修改 DNS 或发布。
+Configuration is provided. No hosting account, paid resource, DNS change, or public release was created automatically.
 
-## 先满足条件
+## Prerequisites
 
-- 一台能运行 Docker Compose 的 Linux 主机。
-- 一个由你控制并指向主机的域名。
-- 服务器 80/443 端口开放；不要公开数据库端口。
-- `.env` 填写强随机 SECRET_KEY、DB_PASSWORD、`DOMAIN=pet.example.com`、`ALLOWED_HOSTS=pet.example.com`。
-- Docker 镜像标签已固定 pgvector 0.8.2 / PostgreSQL 18，运行前确认镜像可拉取；当前 Mac 未实际完成 Docker 启动验证。
+- A Linux host with Docker Compose.
+- A domain you control that points to the host.
+- Ports 80/443 available; the database must not be public.
+- Strong random SECRET_KEY and DB_PASSWORD in `.env`, plus `DOMAIN=pet.example.com` and `ALLOWED_HOSTS=pet.example.com`.
+- The image is pinned to pgvector 0.8.2/PostgreSQL 18. Verify it can be pulled. Initial development used local PostgreSQL because Docker Desktop did not start.
 
-## 操作
+## Deploy
 
 ```sh
 python3 scripts/create_env.py
-# 编辑 .env，填写自己的域名和凭证
+# Edit .env with your domain and private configuration.
 docker compose -f compose.yaml -f compose.production.yaml config --quiet
 docker compose -f compose.yaml -f compose.production.yaml up --build -d
 docker compose logs --tail=100 api jobs
 ```
 
-Caddy 自动处理 HTTPS。API 只通过内部网络交给 Caddy，原始宿主机 8000 绑定 127.0.0.1。API 信任的 forwarded-proto 必须仅由此可信代理设置，不能另将 API 直接公开。
+Caddy manages HTTPS. The API's host port remains bound to 127.0.0.1, and Caddy reaches it over the container network. Only the trusted proxy should set forwarded-proto; do not expose the API directly as another public endpoint.
 
-检查：`https://你的域名/healthz/`，然后用 `scripts/smoke_api.py --url https://你的域名` 做一次真实账号临时冒烟检查。
+Check `https://your-domain/healthz/`, then run `scripts/smoke_api.py --url https://your-domain` to test with a temporary account.
 
-## 生产前需要补验
+## Before a long-lived public deployment
 
-- 初始迁移需能 CREATE EXTENSION；托管数据库可由管理员提前安装 vector。
-- 示例 Compose 使用一个数据库角色便于启动。公开长期服务应拆成迁移角色和最小权限运行角色，再做权限验证。
-- 当前 DRF 内存限流是每进程计数；多 worker/多实例不能视为全局额度控制。公开服务前在反向代理/共享缓存增加限流，并在模型提供商设置硬预算。
-- 完成真实模型结构化输出与 embedding 维度兼容检查。
-- 真实 Apple 签名、HealthKit、APNs、后台通知投递和耗电测试。
-- HealthKit、第三方模型、存储地区和保留期限的隐私披露需与你实际部署一致。
-- 定期执行 token 清理：`python manage.py flushexpiredtokens`。
+- The initial migration must be able to create the vector extension, or an administrator must install it first.
+- The example uses one database role for convenience. Separate migration and least-privilege runtime roles for production and verify their permissions.
+- DRF's in-memory rate limits are per process, not a global multi-worker quota. Add shared or proxy-level limits and set a provider-side spending limit.
+- Test the actual model's structured-output support and embedding dimensions.
+- Validate real Apple signing, HealthKit, APNs, background behavior, and battery use.
+- Match privacy disclosures to the actual model provider, storage region, and retention policy.
+- Clean expired tokens periodically with `python manage.py flushexpiredtokens`.
 
-## APNs 密钥
+## APNs keys
 
-把 `.p8` 密钥放在服务器私有目录，不复制到仓库。通过 Docker override 给 api/jobs 增加只读挂载，`APNS_KEY_PATH` 填容器内路径。不要把密钥写进镜像。
+Store the `.p8` key privately on the server, outside the repository. Mount it read-only into api/jobs with an override and use its container path in APNS_KEY_PATH. Never bake the key into an image.
 
-## 备份与恢复演练
+## Backups and restore drills
 
 ```sh
-# 输出文件包含私人数据，自己妥善保管
+# The backup contains private data. Store it securely.
 docker compose exec -T db pg_dump -U habitpet -Fc habitpet > habitpet.backup
 ```
 
-先恢复到新的空数据库，再进行账号、库存、记忆数量和向量检索检查。实际生产角色分离后按对应角色执行。
+Restore into a new empty database first. Check accounts, inventory, memory counts, and vector retrieval. Use the appropriate role after production role separation.
 
-升级前备份，执行迁移并检查；失败时先判断迁移是否可逆。不能承诺所有数据库变更都可通过回退镜像自动回滚。
+Back up before upgrades. Check migration reversibility before rollback: reverting an image does not automatically undo every schema change.
 
-## 运维观察
+## Observability
 
-健康检查、HTTP 状态/延迟、AI fallback 比例、模型 token usage、APNs 失败码、后台任务错误。现有日志避免记录密钥和完整健康/聊天内容。模型费用按提供商账单核对，代码不编造费用数字。
+Monitor health checks, HTTP errors/latency, AI fallback rate, model token usage, APNs status codes, and background job failures. Logs avoid secrets and full health/chat content. Reconcile costs against the provider bill; no fabricated cost estimates are emitted.

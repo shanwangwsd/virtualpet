@@ -27,9 +27,9 @@ class Command(BaseCommand):
             )
         today(user)
         for name, category, target, unit in [
-            ("日语学习", "study", 30, "minutes"),
-            ("阅读", "reading", 20, "minutes"),
-            ("散步", "exercise", 1, "session"),
+            ("Japanese study", "study", 30, "minutes"),
+            ("Reading", "reading", 20, "minutes"),
+            ("Stretch", "exercise", 1, "session"),
         ]:
             Habit.objects.get_or_create(
                 user=user,

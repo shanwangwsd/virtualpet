@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view()),
     path("api/auth/logout/", TokenBlacklistView.as_view()),
     path("api/today/", views.today),
+    path("api/pet/", views.pet_details),
     path("api/actions/", views.actions),
     path("api/habits/", views.Habits.as_view()),
     path("api/habits/<int:pk>/", views.HabitDetail.as_view()),
@@ -21,10 +22,8 @@ urlpatterns = [
 from core import ai_views
 
 urlpatterns += [
-    path("api/pet/chat/", ai_views.chat),
-    path("api/memories/", ai_views.memories),
-    path("api/memories/<int:pk>/", ai_views.memory_detail),
-    path("api/diary/", ai_views.diary),
+    path("api/schedule/speech/", ai_views.schedule_speech),
+    path("api/pet/reaction/", ai_views.reaction),
     path("api/reminders/", ai_views.reminders),
     path("api/reminders/<int:pk>/ack/", ai_views.acknowledge),
 ]

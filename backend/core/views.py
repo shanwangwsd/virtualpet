@@ -13,7 +13,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from . import services
 from .models import Habit, Pet, Profile, Session
-from .serializers import ActionSerializer, HabitSerializer, HealthSerializer, ProfileSerializer
+from .serializers import (
+    ActionSerializer,
+    HabitSerializer,
+    HealthSerializer,
+    PetDetailsSerializer,
+    ProfileSerializer,
+)
 
 
 @api_view(["POST"])
@@ -185,3 +191,10 @@ def devices(request):
             token=token, defaults={"user": request.user, "active": True}
         )
     return Response({"registered": True}, status=201)
+
+
+@api_view(["PATCH"])
+def pet_details(request):
+    serializer = PetDetailsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    return Response(services.update_pet_details(request.user, serializer.validated_data))
